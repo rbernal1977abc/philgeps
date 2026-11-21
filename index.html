@@ -1,184 +1,65 @@
-from pathlib import Path
-import zipfile, py_compile
-
-base = Path("/mnt/data/philgeps_local_app_v3")
-(base / "static").mkdir(parents=True, exist_ok=True)
-
-app_py = r'''from __future__ import annotations
-import os, re, threading
-from datetime import date, timedelta
-from urllib.parse import urljoin, urlparse
-from flask import Flask, jsonify, request, send_from_directory
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
-
-LOGIN_URL = "https://notices.philgeps.gov.ph/GEPS/log-in.aspx"
-SEARCH_URL = "https://notices.philgeps.gov.ph/GEPS/Tender/OpportunitiesSearchUI.aspx?ClickFrom=OpenOpp&Result=3"
-HOST = "notices.philgeps.gov.ph"
-PROFILE = os.path.join(os.path.dirname(__file__), "philgeps_chrome_profile")
-
-app = Flask(__name__, static_folder="static")
-lock = threading.RLock()
-playwright = context = page = None
-session_ready = False
-last_error = ""
-search_opened_after_login = False
-
-def launch_philgeps_browser():
-    global playwright, context, page, session_ready, last_error, search_opened_after_login
-    with lock:
-        if page is not None and not page.is_closed():
-            page.bring_to_front()
-            return
-        playwright = sync_playwright().start()
-        # Prefer installed Google Chrome. Fall back to Playwright Chromium.
-        try:
-            context = playwright.chromium.launch_persistent_context(
-                PROFILE, channel="chrome", headless=False, accept_downloads=True,
-                args=["--start-maximized"], viewport=None
-            )
-        except Exception:
-            context = playwright.chromium.launch_persistent_context(
-                PROFILE, headless=False, accept_downloads=True,
-                args=["--start-maximized"], viewport=None
-            )
-        page = context.pages[0] if context.pages else context.new_page()
-        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-        session_ready = False
-        search_opened_after_login = False
-        last_error = ""
-
-def is_logged_in():
-    """Conservative check in the browser launched and controlled by this app."""
-    global session_ready
-    if page is None or page.is_closed():
-        session_ready = False
-        return False
-    try:
-        host = (urlparse(page.url).hostname or "").lower()
-        if host != HOST:
-            session_ready = False
-            return False
-        current = page.url.lower()
-        body = (page.locator("body").inner_text(timeout=3000) or "").lower()
-        password_box = page.locator('input[type="password"]').count() > 0
-        login_url = "log-in.aspx" in current or "login" in current
-        login_words = ("username" in body or "user name" in body) and "password" in body
-        auth_words = any(s in body for s in ("log out", "logout", "sign out", "my account"))
-        # A login redirect away from the login page plus no password field is
-        # treated as an authenticated session only if a supplier/account marker appears.
-        session_ready = (not password_box and not login_url and (auth_words or "tender/" in current))
-        return session_ready
-    except Exception:
-        session_ready = False
-        return False
-
-def auto_open_search_if_ready():
-    global search_opened_after_login, session_ready, last_error
-    with lock:
-        if is_logged_in() and not search_opened_after_login:
-            try:
-                page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(900)
-                if "log-in.aspx" in page.url.lower() or page.locator('input[type="password"]').count():
-                    session_ready = False
-                    search_opened_after_login = False
-                    last_error = "PhilGEPS redirected to login. Please sign in again in the opened browser."
-                    return
-                search_opened_after_login = True
-                session_ready = True
-            except Exception as exc:
-                last_error = str(exc)
-                session_ready = False
-
-def keyword_field(p):
-    selectors = [
-        'input[placeholder*="keyword" i]',
-        'input[aria-label*="keyword" i]',
-        'input[name*="keyword" i]',
-        'input[id*="keyword" i]',
-        'input[placeholder*="title" i]',
-        'input[name*="title" i]',
-        'input[id*="txt" i]',
-        'input[type="text"]'
-    ]
-    for selector in selectors:
-        loc = p.locator(selector)
-        for i in range(min(loc.count(), 12)):
-            el = loc.nth(i)
-            try:
-                if el.is_visible() and el.is_enabled():
-                    return el
-            except Exception:
-                pass
-    return None
-
-def submit_search(p):
-    # Try accessible buttons/links first.
-    for role in ("button", "link"):
-        try:
-            loc = p.get_by_role(role, name=re.compile("search", re.I))
-            for i in range(min(loc.count(), 8)):
-                el = loc.nth(i)
-                if el.is_visible() and el.is_enabled():
-                    el.click(timeout=5000)
-                    p.wait_for_load_state("domcontentloaded", timeout=20000)
-                    p.wait_for_timeout(1000)
-                    return True
-        except Exception:
-            pass
-    # Legacy ASP.NET submit controls often have no accessible role name.
-    for selector in ('input[type="submit"]', 'input[type="button"]', 'button'):
-        loc = p.locator(selector)
-        for i in range(min(loc.count(), 20)):
-            el = loc.nth(i)
-            try:
-                label = " ".join([
-                    el.get_attribute("value") or "",
-                    el.get_attribute("title") or "",
-                    el.get_attribute("id") or "",
-                    el.inner_text() or ""
-                ]).lower()
-                if el.is_visible() and el.is_enabled() and "search" in label:
-                    el.click(timeout=5000)
-                    p.wait_for_load_state("domcontentloaded", timeout=20000)
-                    p.wait_for_timeout(1000)
-                    return True
-            except Exception:
-                pass
-    return False
-
-def result_links(p):
-    soup = BeautifulSoup(p.content(), "html.parser")
-    found = []
-    for a in soup.find_all("a", href=True):
-        href = urljoin(p.url, a["href"])
-        if (urlparse(href).hostname or "").lower() == HOST:
-            low = href.lower()
-            if any(k in low for k in ("bidnoticeabstract", "refid=", "opportunitydetail")):
-                if href not in found:
-                    found.append(href)
-    return found
-
-def extract_notice(url):
-    original = page.url
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(300)
-        soup = BeautifulSoup(page.content(), "html.parser")
-        lines = [re.sub(r"\s+", " ", x).strip() for x in soup.get_text("\n", strip=True).splitlines()]
-        text = "\n".join(x for x in lines if x)
-        def value(labels):
-            for label in labels:
-                m = re.search(r"(?im)^\s*" + re.escape(label) + r"\s*:?\s*(.*?)\s*$", text)
-                if m and m.group(1):
-                    return m.group(1).strip()
-            return ""
-        return {
-            "project": value(["Title", "Project Title", "Procurement Project"]),
-            "agency": value(["Procuring Entity", "Agency"]),
-            "reference": value(["Reference Number", "Solicitation Number", "Reference No."]),
-            "abc": value(["Approved Budget for the Contract", "ABC"]),
-            "published": value(["Date Published", "Posting Date"]),
-            "prebid": value(["Pre-Bid Conference", "Pre-Bid Conference Date"]),
-            "closing": value(["Closing Date / Time", "Deadline of Submission", "Bid Submission
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PhilGEPS Procurement Intelligence</title>
+<style>
+:root{color-scheme:dark;--bg:#07100c;--panel:#0d1b14;--line:#244a34;--green:#63e69a;--text:#e8f5ec;--muted:#9bb3a2}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#153b2633,transparent 38rem),var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,sans-serif}.wrap{max-width:1480px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 20px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border:1px solid var(--green);display:grid;place-items:center;color:var(--green);font-weight:800}.kicker{color:var(--green);font-size:10px;letter-spacing:.2em;text-transform:uppercase}h1{font-size:clamp(20px,3vw,28px);margin:2px 0}.badge{border:1px solid var(--line);border-radius:20px;padding:6px 11px;color:var(--muted);font-size:11px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;margin:18px 0}.head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--green);margin:0}.btn{border:1px solid var(--green);background:#63e69a12;color:var(--text);padding:10px 14px;border-radius:5px;font-size:12px;cursor:pointer}.primary{background:var(--green);color:#07110c;font-weight:700}.btn:disabled{opacity:.45;cursor:wait}.row{display:flex;gap:9px;flex-wrap:wrap}input{width:100%;min-width:0;background:#07120c;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:12px;font:inherit}label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.filters{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}.status{font-size:12px;color:var(--muted);margin-top:12px;white-space:pre-wrap}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:1100px;font-size:12px}th{text-align:left;color:var(--green);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:12px 9px;border-bottom:1px solid var(--line)}td{padding:12px 9px;border-bottom:1px solid #244a3466;vertical-align:top}.empty{text-align:center;color:var(--muted);padding:38px 14px}.small{font-size:11px;color:var(--muted)}a{color:var(--green)}.chips{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}.chip{border:1px solid var(--line);color:var(--muted);background:#07120c;padding:6px 10px;border-radius:18px;cursor:pointer;font-size:11px}.chip:hover{border-color:var(--green);color:var(--green)}
+@media(max-width:700px){.wrap{padding:13px}header{align-items:flex-start;flex-direction:column}.filters{grid-template-columns:1fr}.card{padding:14px}}
+</style>
+</head>
+<body><div class="wrap">
+<header><div class="brand"><div class="logo">PG</div><div><div class="kicker">Procurement Intelligence</div><h1>PhilGEPS Opportunity Monitor</h1></div></div><div class="badge" id="state">NOT CONNECTED</div></header>
+<section class="card"><div class="head"><h2>PhilGEPS connection</h2><span class="small">Supplier session</span></div><button class="btn primary" id="connect">Connect to PhilGEPS</button><div class="status" id="connectionMsg">Click Connect, then sign in in the PhilGEPS browser window that opens. This dashboard will detect the session automatically.</div></section>
+<section class="card"><div class="head"><h2>Procurement keyword search</h2><span class="small">Past 3 calendar days by default</span></div>
+<div class="filters"><div><label for="keyword">Procurement keyword</label><input id="keyword" placeholder="Enter a keyword, e.g. CCTV"></div><div><label for="from">Posting date from</label><input type="date" id="from"></div><div><label for="to">Posting date to</label><input type="date" id="to"></div></div>
+<div class="chips"><button class="chip" data-key="CCTV">CCTV</button><button class="chip" data-key="computers">Computers</button><button class="chip" data-key="networking equipment">Networking equipment</button><button class="chip" data-key="servers">Servers</button></div>
+<div class="row"><button class="btn primary" id="search">Search procurement opportunities</button></div><div class="status" id="searchMsg">Connect to PhilGEPS before searching.</div></section>
+<section class="card"><div class="head"><h2>Procurement records</h2><span class="small" id="count">0 records</span></div><div class="tablewrap"><table><thead><tr><th>Project / procurement title</th><th>Procuring entity</th><th>Reference number</th><th>ABC</th><th>Bid creation / posting date</th><th>Pre-bid date</th><th>Bid closing date</th><th>Source notice</th></tr></thead><tbody id="rows"></tbody></table></div><div class="empty" id="empty">No procurement records retrieved yet.</div></section>
+</div>
+<script>
+const $=id=>document.getElementById(id);let sessionReady=false,autoVerifyBusy=false;
+const today=new Date();today.setHours(0,0,0,0);const first=new Date(today);first.setDate(first.getDate()-2);
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+$('from').value=iso(first);$('to').value=iso(today);
+async function readJson(response){const raw=await response.text();try{return JSON.parse(raw)}catch(e){throw Error('The local service returned an unexpected page instead of a normal response. Close and restart the application, then try again.')}} 
+async function post(url,data={}){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});const j=await readJson(r);if(!r.ok||j.ok===false)throw Error(j.error||`Request failed (${r.status})`);return j}
+async function pollSession(){
+ try{
+  const r=await fetch('/api/status',{headers:{'Accept':'application/json'}});
+  const s=await readJson(r);
+  if(s.verified){sessionReady=true;$('state').textContent='PHILGEPS CONNECTED';$('connectionMsg').textContent='PhilGEPS session detected. You can now search.';return}
+  if(s.browser_open){
+   $('state').textContent='WAITING FOR LOGIN';
+   $('connectionMsg').textContent='Finish signing in inside the PhilGEPS browser window opened by this app. This dashboard is checking automatically.';
+   const current=(s.current_url||'').toLowerCase();
+   const isLogin=current.includes('log-in.aspx')||current.includes('login');
+   if(!isLogin&&!autoVerifyBusy){
+    autoVerifyBusy=true;
+    try{const v=await post('/api/verify');sessionReady=true;$('state').textContent='PHILGEPS CONNECTED';$('connectionMsg').textContent='PhilGEPS session detected. Procurement search is ready.'}
+    catch(e){$('connectionMsg').textContent=e.message}
+    finally{autoVerifyBusy=false}
+   }
+  }
+ }catch(e){$('connectionMsg').textContent=e.message}
+}
+$('connect').onclick=async()=>{const b=$('connect');b.disabled=true;try{const j=await post('/api/connect');$('state').textContent='WAITING FOR LOGIN';$('connectionMsg').textContent=j.message+' Complete the sign-in in that browser window.'}catch(e){$('connectionMsg').textContent=e.message}finally{b.disabled=false}};
+document.querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>{$('keyword').value=b.dataset.key;$('keyword').focus()});
+$('search').onclick=async()=>{
+ if(!$('keyword').value.trim()){$('searchMsg').textContent='Enter a keyword or choose a suggested keyword.';return}
+ if(!sessionReady){$('searchMsg').textContent='PhilGEPS login has not been detected yet. Complete sign-in in the browser window opened by this app.';return}
+ const b=$('search');b.disabled=true;$('searchMsg').textContent='Searching PhilGEPS…';$('rows').innerHTML='';$('count').textContent='Searching…';$('empty').style.display='none';
+ try{
+  const j=await post('/api/search',{keyword:$('keyword').value,from:$('from').value,to:$('to').value});
+  $('count').textContent=j.count+' records';$('searchMsg').textContent=`Search finished: ${j.count} records found across ${j.pages_scanned} result page(s).`;
+  for(const r of j.records){const tr=document.createElement('tr');[r.project,r.agency,r.reference,r.abc,r.published,r.prebid,r.closing].forEach(v=>{const td=document.createElement('td');td.textContent=v||'—';tr.appendChild(td)});const td=document.createElement('td');if(r.url){const a=document.createElement('a');a.href=r.url;a.target='_blank';a.rel='noopener';a.textContent='Open notice ↗';td.appendChild(a)}else td.textContent='—';tr.appendChild(td);$('rows').appendChild(tr)}
+  $('empty').style.display=j.count?'none':'block';if(!j.count)$('empty').textContent='PhilGEPS returned no matching records for this keyword and date range.';
+ }catch(e){$('count').textContent='0 records';$('searchMsg').textContent=e.message;$('empty').style.display='block';$('empty').textContent='No records were returned.'}
+ finally{b.disabled=false}
+};
+$('keyword').addEventListener('keydown',e=>{if(e.key==='Enter')$('search').click()});
+setInterval(pollSession,1500);pollSession();
+</script></body></html>
