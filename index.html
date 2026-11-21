@@ -1,351 +1,105 @@
 from pathlib import Path
-import zipfile, textwrap, os
 
-root = Path("/mnt/data/PhilGEPS_Complete_Project")
-(root / "static").mkdir(parents=True, exist_ok=True)
-
-# Reuse the corrected UI, configured to talk to the local persistent browser service.
-frontend = Path("/mnt/data/PhilGEPS_Final_Frontend/index.html").read_text(encoding="utf-8")
-(root / "static" / "index.html").write_text(frontend, encoding="utf-8")
-
-server = r'''from __future__ import annotations
-import os, re, threading, time
-from datetime import date, timedelta
-from urllib.parse import urljoin, urlparse
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
-
-LOGIN_URL = "https://notices.philgeps.gov.ph/GEPS/log-in.aspx"
-SEARCH_URL = "https://notices.philgeps.gov.ph/GEPS/Tender/OpportunitiesSearchUI.aspx?ClickFrom=OpenOpp&Result=3"
-ALLOWED_HOST = "notices.philgeps.gov.ph"
-PROFILE_DIR = os.path.join(os.path.dirname(__file__), "philgeps_browser_profile")
-FRONTEND_ORIGIN = "https://philgeps.vercel.app"
-
-app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"]}},
-     allow_headers=["Content-Type"], methods=["GET", "POST", "OPTIONS"])
-lock = threading.RLock()
-pw = browser = context = page = None
-connected = False
-last_error = ""
-last_session_probe = 0.0
-
-def official_url(url: str) -> bool:
-    return urlparse(url or "").hostname == ALLOWED_HOST
-
-def probe_session() -> bool:
-    """Confirm access to the protected opportunities route in the persistent context."""
-    global connected, last_error, last_session_probe
-    if not context:
-        connected = False
-        return False
-    now = time.monotonic()
-    if now - last_session_probe < 2.0:
-        return connected
-    last_session_probe = now
-    probe = None
-    try:
-        probe = context.new_page()
-        response = probe.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=30000)
-        probe.wait_for_timeout(700)
-        final_url = probe.url or ""
-        if not official_url(final_url):
-            connected = False
-            last_error = "PhilGEPS redirected outside its official domain."
-            return False
-        final_lower = final_url.lower()
-        if "log-in.aspx" in final_lower or "login" in final_lower:
-            connected = False
-            last_error = ""
-            return False
-        # Confirm we landed on the requested opportunities page, not merely any
-        # PhilGEPS page. A successful HTTP response alone is not sufficient.
-        body = (probe.locator("body").inner_text(timeout=5000) or "").lower()
-        has_search_ui = any(word in body for word in ("search", "opportunities", "procurement"))
-        has_login_form = probe.locator('input[type="password"]').count() > 0
-        connected = bool(response and response.ok and has_search_ui and not has_login_form
-                         and "opportunitiessearchui.aspx" in final_lower)
-        last_error = "" if connected else "PhilGEPS has not confirmed access to the protected opportunities search page."
-        return connected
-    except Exception as exc:
-        connected = False
-        last_error = f"Session check failed: {exc}"
-        return False
-    finally:
-        if probe:
-            try: probe.close()
-            except Exception: pass
-
-def start_browser():
-    global pw, browser, context, page, connected, last_error
-    with lock:
-        if context and page and not page.is_closed():
-            try: page.bring_to_front()
-            except Exception: pass
-            return
-        pw = sync_playwright().start()
-        context = pw.chromium.launch_persistent_context(
-            PROFILE_DIR, headless=False, accept_downloads=True,
-            args=["--start-maximized"], viewport=None
-        )
-        page = context.pages[0] if context.pages else context.new_page()
-        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-        connected = False
-        last_error = ""
-
-def find_keyword_field(p):
-    selectors = [
-        'input[placeholder*="keyword" i]', 'input[aria-label*="keyword" i]',
-        'input[name*="keyword" i]', 'input[id*="keyword" i]',
-        'input[placeholder*="title" i]', 'input[name*="title" i]',
-        'input[type="text"]'
-    ]
-    for selector in selectors:
-        loc = p.locator(selector)
-        for i in range(min(loc.count(), 10)):
-            el = loc.nth(i)
-            try:
-                if el.is_visible() and el.is_enabled(): return el
-            except Exception: pass
-    return None
-
-def fill_date_fields(p, start, end):
-    changed = []
-    for el in p.locator("input").all():
-        try:
-            if not el.is_visible() or not el.is_enabled(): continue
-            meta = " ".join(str(el.get_attribute(x) or "") for x in
-                            ["name", "id", "placeholder", "aria-label", "title"]).lower()
-            if not any(k in meta for k in ["date", "publish", "posted", "created", "from", "to"]): continue
-            val = start if any(k in meta for k in ["from", "start"]) else end
-            if (el.get_attribute("type") or "").lower() == "date": el.fill(val)
-            else: el.fill(date.fromisoformat(val).strftime("%m/%d/%Y"))
-            changed.append(meta)
-        except Exception: pass
-    return changed
-
-def click_search(p):
-    for selector in ['input[type="submit"]', 'input[type="button"]', 'button']:
-        loc = p.locator(selector)
-        for i in range(min(loc.count(), 15)):
-            try:
-                el = loc.nth(i)
-                label = (el.get_attribute("value") or el.inner_text() or el.get_attribute("title") or "").strip()
-                if el.is_visible() and "search" in label.lower():
-                    el.click(timeout=5000)
-                    try: p.wait_for_load_state("domcontentloaded", timeout=15000)
-                    except Exception: pass
-                    p.wait_for_timeout(1000)
-                    return True
-            except Exception: pass
-    return False
-
-def collect_result_links(p):
-    soup = BeautifulSoup(p.content(), "html.parser")
-    links = []
-    for a in soup.find_all("a", href=True):
-        href = urljoin(p.url, a["href"])
-        low = href.lower()
-        if official_url(href) and ("bidnoticeabstract" in low or "refid=" in low):
-            if href not in links: links.append(href)
-    return links
-
-def extract_detail(url):
-    global page
-    original = page.url
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(350)
-        soup = BeautifulSoup(page.content(), "html.parser")
-        txt = re.sub(r"[ \t]+", " ", soup.get_text("\n", strip=True))
-        def after(label):
-            m = re.search(r"(?im)^\s*" + re.escape(label) + r"\s*:?\s*(.+?)\s*$", txt)
-            return m.group(1).strip() if m else ""
-        title = after("Title") or after("Project Title")
-        agency = after("Procuring Entity")
-        ref = after("Reference Number")
-        abc = after("Approved Budget for the Contract")
-        published = after("Date Published")
-        closing = after("Closing Date / Time")
-        prebid = ""
-        m = re.search(r"(?is)Pre-?Bid Conference\s*(?:Date\s*Time\s*Venue)?\s*(.{0,500}?)(?:Other Information|Remarks|Created by|$)", txt)
-        if m: prebid = re.sub(r"\s+", " ", m.group(1)).strip(" :\n")
-        return {"project": title, "agency": agency, "reference": ref, "abc": abc,
-                "published": published, "prebid": prebid, "closing": closing, "url": url}
-    finally:
-        try: page.goto(original, wait_until="domcontentloaded", timeout=20000)
-        except Exception: pass
-
-@app.get("/api/status")
-def status():
-    with lock:
-        if context and page and not page.is_closed():
-            verified = probe_session()
-        else:
-            verified = False
-        return jsonify({"ok": True, "browser_open": bool(page and not page.is_closed()),
-                        "verified": verified, "current_url": page.url if page and not page.is_closed() else "",
-                        "error": last_error})
-
-@app.post("/api/connect")
-def connect():
-    try:
-        start_browser()
-        return jsonify({"ok": True, "message": "Official PhilGEPS login opened in the RP8 browser. Sign in there; this dashboard will detect access automatically."})
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-@app.post("/api/search")
-def search():
-    global connected, last_error
-    body = request.get_json(silent=True) or {}
-    keyword = (body.get("keyword") or "").strip()
-    if not keyword: return jsonify({"ok": False, "error": "Enter a procurement keyword."}), 400
-    try:
-        start = date.fromisoformat(body.get("from") or (date.today()-timedelta(days=2)).isoformat())
-        end = date.fromisoformat(body.get("to") or date.today().isoformat())
-        if end < start: return jsonify({"ok": False, "error": "The end date must be on or after the start date."}), 400
-    except ValueError:
-        return jsonify({"ok": False, "error": "Use valid dates in YYYY-MM-DD format."}), 400
-    with lock:
-        if not context or not page or page.is_closed() or not probe_session():
-            return jsonify({"ok": False, "error": "PhilGEPS login is not verified. Sign in through the RP8 browser first."}), 401
-        try:
-            page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(700)
-            field = find_keyword_field(page)
-            if not field:
-                return jsonify({"ok": False, "error": "PhilGEPS session is active, but the keyword field selector needs adjustment for the current search page."}), 502
-            field.fill(keyword)
-            fill_date_fields(page, start.isoformat(), end.isoformat())
-            if not click_search(page):
-                return jsonify({"ok": False, "error": "Could not identify PhilGEPS Search control. No results were claimed."}), 502
-            records, seen, pages = [], set(), 0
-            while pages < 30:
-                pages += 1
-                for link in collect_result_links(page):
-                    if link in seen: continue
-                    seen.add(link)
-                    try:
-                        record = extract_detail(link)
-                        if record["project"] or record["reference"]: records.append(record)
-                    except Exception: continue
-                next_button = None
-                for selector in ["a", "button", 'input[type="submit"]']:
-                    loc = page.locator(selector)
-                    for i in range(min(loc.count(), 80)):
-                        el = loc.nth(i)
-                        try:
-                            label = (el.inner_text() or el.get_attribute("value") or el.get_attribute("title") or "").strip().lower()
-                            if el.is_visible() and (label in ["next", ">", "›"] or "next page" in label):
-                                next_button = el; break
-                        except Exception: pass
-                    if next_button: break
-                if not next_button: break
-                try:
-                    next_button.click(timeout=3000)
-                    try: page.wait_for_load_state("domcontentloaded", timeout=12000)
-                    except Exception: pass
-                    page.wait_for_timeout(500)
-                except Exception: break
-            return jsonify({"ok": True, "count": len(records), "records": records,
-                            "pages_scanned": pages, "keyword": keyword,
-                            "period": {"from": start.isoformat(), "to": end.isoformat()},
-                            "note": "Extracted fields should be checked against each official notice."})
-        except Exception as exc:
-            last_error = str(exc)
-            connected = False
-            return jsonify({"ok": False, "error": str(exc)}), 500
-
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "service": "RP8 PhilGEPS local browser service"})
-
-if __name__ == "__main__":
-    print("RP8 PhilGEPS service listening on http://127.0.0.1:8765")
-    print("Keep this window open while using the Vercel dashboard.")
-    app.run(host="127.0.0.1", port=8765, debug=False, threaded=True)
-'''
-(root / "server.py").write_text(server, encoding="utf-8")
-(root / "requirements.txt").write_text("Flask==3.1.1\nflask-cors==5.0.1\nplaywright==1.52.0\nbeautifulsoup4==4.13.4\n", encoding="utf-8")
-(root / "start_rp8_philgeps.bat").write_text(r'''@echo off
-cd /d "%~dp0"
-py -3 -m venv .venv
-call .venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-python -m playwright install chromium
-python server.py
-pause
-''', encoding="utf-8")
-(root / "README.txt").write_text(textwrap.dedent("""\
-    RP8 PHILGEPS OPPORTUNITY MONITOR — COMPLETE FRONTEND + LOCAL AUTHENTICATED BROWSER SERVICE
-
-    WHAT THIS PACKAGE DOES
-    - Keeps the dashboard frontend compatible with the existing Vercel site.
-    - Runs a persistent Playwright Chromium profile on the Windows computer.
-    - The Connect button opens the official PhilGEPS login in that managed browser.
-    - The dashboard polls the service and verifies access by requesting the protected
-      PhilGEPS opportunities page in the same persistent browser context.
-    - Search requests are sent to that browser service; credentials are never entered
-      into this dashboard or stored in source code.
-
-    IMPORTANT ARCHITECTURE
-    The browser service must run on the same computer that displays the Vercel dashboard.
-    The browser profile is stored in ./philgeps_browser_profile and persists between runs.
-    Keep the command window open while using the dashboard. Each colleague who uses the
-    dashboard needs their own local service/browser profile and must sign in themselves.
-    This is intentional: the PhilGEPS session is not shared by copying cookies or passwords.
-
-    INSTALL / RUN ON WINDOWS
-    1. Extract this ZIP to a permanent folder, e.g. C:\\RP8\\PhilGEPS.
-    2. Double-click start_rp8_philgeps.bat.
-    3. Allow the first-time Python package and Chromium installation to finish.
-    4. Leave the black command window open.
-    5. Open https://philgeps.vercel.app in Chrome or Edge.
-    6. Click Connect to PhilGEPS. A separate managed Chromium window opens.
-    7. Sign in on the official PhilGEPS page in that Chromium window.
-    8. Return to the dashboard. It checks every two seconds and should display
-       PHILGEPS CONNECTED after the protected opportunities page is accessible.
-    9. Search using CCTV, computers, networking equipment, servers, or another keyword.
-
-    VERCEL FRONTEND
-    The included static/index.html is the corrected frontend. Replace the repository's
-    index.html with this file's contents (move static/index.html to repository root)
-    and redeploy on Vercel. It calls http://127.0.0.1:8765, which is the service on the
-    user's own computer.
-
-    SECURITY
-    - Never paste supplier credentials into ChatGPT, source code, or dashboard fields.
-    - Sign in only on notices.philgeps.gov.ph in the managed browser.
-    - Do not expose port 8765 to the public internet or configure router port forwarding.
-    - The service binds to 127.0.0.1 only.
-    - Browser profile contains the authenticated session; protect the Windows account
-      and do not share the profile folder.
-
-    TEST STATUS / LIMITATIONS
-    The source repository currently has only index.html; it has no hosted backend.
-    This package supplies the missing local backend and UI wiring. The PhilGEPS login
-    and current search page have not been live-tested with your supplier account.
-    PhilGEPS is a legacy ASP.NET site and may change its form selectors or markup.
-    If login detection stays pending or a search selector error appears, send the
-    exact on-screen error and the service command-window output (hide any personal
-    information). Do not send passwords, cookies, or session files.
-    A successful session check does not guarantee that every notice field is parsed
-    perfectly; verify each record using its official notice link.
-
-    DATE DEFAULT
-    The dashboard defaults to today and the preceding two calendar days, inclusive.
-"""), encoding="utf-8")
-
-# Add a copy of frontend at project root for simple Vercel replacement.
-(root / "index.html").write_text(frontend, encoding="utf-8")
-
-zip_path = Path("/mnt/data/PhilGEPS_Complete_Authenticated_Project.zip")
-with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-    for p in root.rglob("*"):
-        if p.is_file():
-            z.write(p, p.relative_to(root.parent))
-print("Created", zip_path, "size", zip_path.stat().st_size)
+out = Path("/mnt/data/RP8_Procurement_Monitor_Manual.html")
+html = r'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RP8 | Philippine Public Procurement Monitor</title>
+<style>
+:root{--navy:#10243a;--blue:#1769aa;--bg:#f3f6fa;--line:#dce4ed;--muted:#65758a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#182536;font:15px/1.5 Arial,Helvetica,sans-serif}
+header{background:linear-gradient(120deg,#10243a,#174b72);color:white;padding:25px max(22px,calc((100% - 1240px)/2))}
+header .eyebrow{font-size:12px;letter-spacing:1.8px;opacity:.8}h1{margin:5px 0;font-size:27px}header p{margin:0;color:#d8e7f5}
+main{max-width:1240px;margin:24px auto;padding:0 18px}.panel,.stat{background:white;border:1px solid var(--line);border-radius:12px}
+.toolbar{padding:17px;display:grid;grid-template-columns:2fr 1fr auto;gap:10px;align-items:end}
+label{display:block;font-size:12px;color:var(--muted);font-weight:bold;margin-bottom:5px}
+input,select,button,textarea{width:100%;min-height:40px;border:1px solid #cbd6e2;border-radius:7px;padding:8px 11px;font:inherit;background:white;color:#172638}
+button{background:var(--blue);border:0;color:white;font-weight:bold;cursor:pointer;padding:9px 16px}button.secondary{background:#eaf1f8;color:#174b72}
+.filters{padding:14px 17px;margin-top:12px}.filter-title{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px}.checkgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.check{display:flex;align-items:center;gap:8px;font-size:13px;color:#29445e}.check input{width:16px;min-height:16px;margin:0;accent-color:#1769aa}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.chip{width:auto;min-height:33px;padding:0 12px;background:white;border:1px solid var(--line);border-radius:20px;color:#31506d;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}.stat{padding:14px 16px}.stat strong{font-size:23px;display:block}.stat span{font-size:12px;color:var(--muted)}
+.panel{overflow:hidden}.panelhead{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}.panelhead h2{font-size:17px;margin:0}.meta{font-size:12px;color:var(--muted)}
+.tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:900px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid #edf1f5;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#65758a;background:#f8fafc}td{font-size:13px}td a{color:#1769aa;font-weight:bold;text-decoration:none}.tag{display:inline-block;background:#eaf3fb;color:#205982;border-radius:20px;padding:3px 8px;font-size:11px}.empty{padding:38px;text-align:center;color:var(--muted)}
+.formgrid{padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.formgrid .wide{grid-column:1/-1}.formactions{display:flex;gap:9px;flex-wrap:wrap;padding:0 16px 16px}.formactions button{width:auto}.notice{padding:12px 16px;background:#fff8e8;border:1px solid #f1dfb5;border-radius:9px;color:#72551c;font-size:13px;margin:14px 0}
+footer{text-align:center;color:#718096;font-size:11px;padding:24px}
+@media(max-width:800px){.toolbar{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.formgrid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.toolbar,.formgrid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:1fr}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<header><div class="eyebrow">RP8 PROCUREMENT INTELLIGENCE</div><h1>Philippine Public Procurement Monitor</h1><p>Manually maintained directory of public procurement notices and opportunities nationwide.</p></header>
+<main>
+<div class="notice"><b>Manual mode:</b> No login, background collector, or cloud backend is required. Add notices you find on official websites. Records are saved in this browser on this device. Use Export Backup regularly if you want to keep or transfer your records.</div>
+<section class="toolbar panel">
+ <div><label for="q">SEARCH SAVED OPPORTUNITIES</label><input id="q" placeholder="e.g. CCTV, laptops, network switches, construction"></div>
+ <div><label for="period">POSTED</label><select id="period"><option value="3">Past 3 days</option><option value="7">Past 7 days</option><option value="30">Past 30 days</option><option value="all" selected>Any date</option></select></div>
+ <button id="searchBtn">Search</button>
+</section>
+<section class="filters panel">
+ <div class="filter-title"><b>ORGANIZATION TYPES</b><span class="meta">Choose one or more categories</span></div>
+ <div class="checkgrid">
+  <label class="check"><input type="checkbox" class="orgfilter" value="government" checked> All government offices</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="international" checked> International schools</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="university" checked> Universities and colleges</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="private" checked> Private schools</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="public" checked> Public schools</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="gocc" checked> Government-owned corporations</label>
+  <label class="check"><input type="checkbox" class="orgfilter" value="lgu" checked> Provinces, cities and municipalities</label>
+ </div>
+</section>
+<div class="chips">
+ <button class="chip" data-q="CCTV">CCTV</button><button class="chip" data-q="computer laptop">Computers</button><button class="chip" data-q="network switch router">Networking</button><button class="chip" data-q="server data center">Servers</button><button class="chip" data-q="software license">Software</button><button class="chip" data-q="">All notices</button>
+</div>
+<section class="stats">
+ <div class="stat"><strong id="count">0</strong><span>SAVED OPPORTUNITIES</span></div>
+ <div class="stat"><strong id="orgcount">0</strong><span>ORGANIZATIONS IN YOUR RECORDS</span></div>
+ <div class="stat"><strong>MANUAL</strong><span>UPDATE MODE</span></div>
+</section>
+<section class="panel" style="margin-bottom:14px">
+ <div class="panelhead"><h2>Add a public notice</h2><span class="meta">Enter information from the official source</span></div>
+ <form id="noticeForm">
+ <div class="formgrid">
+  <div class="wide"><label for="title">PROJECT / NOTICE TITLE *</label><input id="title" required placeholder="Exact title from the official announcement"></div>
+  <div><label for="organization">ORGANIZATION *</label><input id="organization" required placeholder="Department, school, university, LGU"></div>
+  <div><label for="orgType">ORGANIZATION TYPE *</label><select id="orgType" required><option value="government">Government office</option><option value="international">International school</option><option value="university">University / college</option><option value="private">Private school</option><option value="public">Public school</option><option value="gocc">Government-owned corporation</option><option value="lgu">Province / city / municipality</option></select></div>
+  <div><label for="type">NOTICE TYPE</label><select id="type"><option>Invitation to Bid</option><option>Request for Quotation</option><option>Bid Bulletin</option><option>Request for Proposal</option><option>Procurement Notice</option><option>Other Announcement</option></select></div>
+  <div><label for="postedAt">POSTING DATE</label><input id="postedAt" type="date"></div>
+  <div><label for="deadline">BID DEADLINE</label><input id="deadline" type="date"></div>
+  <div><label for="budget">ABC / BUDGET (PHP)</label><input id="budget" placeholder="e.g. 1500000"></div>
+  <div><label for="reference">REFERENCE NUMBER</label><input id="reference" placeholder="Optional"></div>
+  <div class="wide"><label for="url">OFFICIAL SOURCE LINK *</label><input id="url" type="url" required placeholder="https://official-government-or-school-website.gov.ph/..."></div>
+  <div class="wide"><label for="description">NOTES</label><textarea id="description" rows="2" placeholder="Optional details, location, pre-bid meeting, contact office"></textarea></div>
+ </div>
+ <div class="formactions"><button type="submit">Save notice</button><button type="reset" class="secondary">Clear form</button></div>
+ </form>
+</section>
+<section class="panel">
+ <div class="panelhead"><h2>Saved public procurement notices</h2><div class="formactions" style="padding:0"><button class="secondary" id="exportBtn">Export backup</button><button class="secondary" id="importBtn">Import backup</button><button class="secondary" id="csvBtn">Export CSV</button><input type="file" id="importFile" accept="application/json" hidden></div></div>
+ <div class="tablewrap"><table><thead><tr><th>Opportunity / Notice</th><th>Organization</th><th>Type</th><th>Posted</th><th>Deadline</th><th>ABC / Budget</th><th>Source</th><th>Action</th></tr></thead><tbody id="rows"><tr><td colspan="8" class="empty">No notices saved yet. Add your first notice using the form above.</td></tr></tbody></table></div>
+</section>
+</main><footer>CREATED BY RP8</footer>
+<script>
+const KEY="rp8_manual_procurement_notices_v1";let records=[];
+const $=id=>document.getElementById(id);
+function load(){try{records=JSON.parse(localStorage.getItem(KEY)||"[]");if(!Array.isArray(records))records=[]}catch{records=[]}}
+function save(){localStorage.setItem(KEY,JSON.stringify(records));render()}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmt(v){if(!v)return "—";let d=new Date(v+"T00:00:00");return isNaN(d)?"—":d.toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"})}
+function render(){let q=$("q").value.toLowerCase().trim(),days=$("period").value,cutoff=days==="all"?null:Date.now()-Number(days)*86400000,selected=[...document.querySelectorAll(".orgfilter:checked")].map(e=>e.value);
+ let items=records.filter(x=>{let txt=[x.title,x.organization,x.description,x.type,x.reference].join(" ").toLowerCase();let date=x.postedAt?new Date(x.postedAt).getTime():NaN;return (!q||q.split(/\s+/).some(w=>txt.includes(w)))&&(!cutoff||!isFinite(date)||date>=cutoff)&&selected.includes(x.orgType)});
+ $("count").textContent=items.length;$("orgcount").textContent=new Set(records.map(x=>x.organization.toLowerCase())).size;
+ const body=$("rows");body.innerHTML="";if(!items.length){body.innerHTML='<tr><td colspan="8" class="empty">No matching saved notices. Add a notice manually or change your filters.</td></tr>';return}
+ items.forEach(x=>{let tr=document.createElement("tr");tr.innerHTML=`<td><b>${esc(x.title)}</b>${x.reference?`<div class="meta">Ref: ${esc(x.reference)}</div>`:""}</td><td>${esc(x.organization)}</td><td><span class="tag">${esc(x.type)}</span></td><td>${fmt(x.postedAt)}</td><td>${fmt(x.deadline)}</td><td>${x.budget? "₱"+esc(Number(x.budget).toLocaleString("en-PH")):"—"}</td><td><a href="${esc(x.url)}" target="_blank" rel="noopener">Open source</a></td><td><button class="secondary delete" data-id="${esc(x.id)}">Delete</button></td>`;body.append(tr)});
+ document.querySelectorAll(".delete").forEach(b=>b.onclick=()=>{if(confirm("Delete this saved notice?")){records=records.filter(x=>x.id!==b.dataset.id);save()}});
+}
+$("noticeForm").onsubmit=e=>{e.preventDefault();let x={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:$("title").value.trim(),organization:$("organization").value.trim(),orgType:$("orgType").value,type:$("type").value,postedAt:$("postedAt").value,deadline:$("deadline").value,budget:$("budget").value.trim(),reference:$("reference").value.trim(),url:$("url").value.trim(),description:$("description").value.trim()};if(!/^https?:\/\//i.test(x.url)){alert("Please enter a complete official source link beginning with https:// or http://");return}records.unshift(x);save();e.target.reset();});
+$("searchBtn").onclick=render;$("q").onkeydown=e=>{if(e.key==="Enter")render()};$("period").onchange=render;document.querySelectorAll(".orgfilter").forEach(x=>x.onchange=render);document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{$("q").value=b.dataset.q;render()});
+$("exportBtn").onclick=()=>{download("rp8-procurement-backup.json",JSON.stringify(records,null,2),"application/json")};
+$("csvBtn").onclick=()=>{let cols=["title","organization","orgType","type","postedAt","deadline","budget","reference","url","description"];let csv=[cols.join(","),...records.map(r=>cols.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(","))].join("\r\n");download("rp8-procurement-notices.csv",csv,"text/csv")};
+function download(name,data,type){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([data],{type}));a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+$("importBtn").onclick=()=>$("importFile").click();$("importFile").onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let data=JSON.parse(await f.text());if(!Array.isArray(data))throw Error();let map=new Map(records.map(x=>[x.id,x]));data.forEach(x=>{if(x&&x.title&&x.organization&&x.url)map.set(x.id||String(Date.now()+Math.random()),x)});records=[...map.values()];save();alert("Backup imported.")}catch{alert("That backup file is not valid.")}e.target.value=""};
+load();render();
+</script>
+</body></html>'''
+out.write_text(html, encoding="utf-8")
+print(f"Created manual-only single-file dashboard: {out} ({out.stat().st_size:,} bytes)")
