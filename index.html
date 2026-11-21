@@ -1,7 +1,4 @@
-from pathlib import Path
-
-out = Path("/mnt/data/RP8_Procurement_Monitor_Manual.html")
-html = r'''<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -21,15 +18,14 @@ button{background:var(--blue);border:0;color:white;font-weight:bold;cursor:point
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}.stat{padding:14px 16px}.stat strong{font-size:23px;display:block}.stat span{font-size:12px;color:var(--muted)}
 .panel{overflow:hidden}.panelhead{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}.panelhead h2{font-size:17px;margin:0}.meta{font-size:12px;color:var(--muted)}
 .tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:900px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid #edf1f5;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#65758a;background:#f8fafc}td{font-size:13px}td a{color:#1769aa;font-weight:bold;text-decoration:none}.tag{display:inline-block;background:#eaf3fb;color:#205982;border-radius:20px;padding:3px 8px;font-size:11px}.empty{padding:38px;text-align:center;color:var(--muted)}
-.formgrid{padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.formgrid .wide{grid-column:1/-1}.formactions{display:flex;gap:9px;flex-wrap:wrap;padding:0 16px 16px}.formactions button{width:auto}.notice{padding:12px 16px;background:#fff8e8;border:1px solid #f1dfb5;border-radius:9px;color:#72551c;font-size:13px;margin:14px 0}
-footer{text-align:center;color:#718096;font-size:11px;padding:24px}
-@media(max-width:800px){.toolbar{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.formgrid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.toolbar,.formgrid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:1fr}h1{font-size:22px}}
+.formactions{display:flex;gap:9px;flex-wrap:wrap;padding:0 16px 16px}.formactions button{width:auto}
+.directory{margin:14px 0}.directory-intro{padding:14px 17px;border-bottom:1px solid var(--line);color:#536579;font-size:13px}.dirgroup{padding:14px 17px;border-bottom:1px solid #edf1f5}.dirgroup:last-child{border-bottom:0}.dirgroup h3{margin:0 0 9px;font-size:14px;color:#173b5b}.dirlinks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 14px}.dirlinks a{font-size:13px;color:#1769aa;text-decoration:none}.dirlinks a:hover{text-decoration:underline}.dirlinks small{display:block;color:#718096;font-size:11px}footer{text-align:center;color:#718096;font-size:11px;padding:24px}
+@media(max-width:800px){.toolbar{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.toolbar{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.checkgrid{grid-template-columns:1fr}h1{font-size:22px}}
 </style>
 </head>
 <body>
-<header><div class="eyebrow">RP8 PROCUREMENT INTELLIGENCE</div><h1>Philippine Public Procurement Monitor</h1><p>Manually maintained directory of public procurement notices and opportunities nationwide.</p></header>
+<header><div class="eyebrow">RP8 PROCUREMENT INTELLIGENCE</div><h1>Philippine Public Procurement Monitor</h1><p>Directory of Philippine government, school and university procurement information and official website links.</p></header>
 <main>
-<div class="notice"><b>Manual mode:</b> No login, background collector, or cloud backend is required. Add notices you find on official websites. Records are saved in this browser on this device. Use Export Backup regularly if you want to keep or transfer your records.</div>
 <section class="toolbar panel">
  <div><label for="q">SEARCH SAVED OPPORTUNITIES</label><input id="q" placeholder="e.g. CCTV, laptops, network switches, construction"></div>
  <div><label for="period">POSTED</label><select id="period"><option value="3">Past 3 days</option><option value="7">Past 7 days</option><option value="30">Past 30 days</option><option value="all" selected>Any date</option></select></div>
@@ -55,27 +51,69 @@ footer{text-align:center;color:#718096;font-size:11px;padding:24px}
  <div class="stat"><strong id="orgcount">0</strong><span>ORGANIZATIONS IN YOUR RECORDS</span></div>
  <div class="stat"><strong>MANUAL</strong><span>UPDATE MODE</span></div>
 </section>
-<section class="panel" style="margin-bottom:14px">
- <div class="panelhead"><h2>Add a public notice</h2><span class="meta">Enter information from the official source</span></div>
- <form id="noticeForm">
- <div class="formgrid">
-  <div class="wide"><label for="title">PROJECT / NOTICE TITLE *</label><input id="title" required placeholder="Exact title from the official announcement"></div>
-  <div><label for="organization">ORGANIZATION *</label><input id="organization" required placeholder="Department, school, university, LGU"></div>
-  <div><label for="orgType">ORGANIZATION TYPE *</label><select id="orgType" required><option value="government">Government office</option><option value="international">International school</option><option value="university">University / college</option><option value="private">Private school</option><option value="public">Public school</option><option value="gocc">Government-owned corporation</option><option value="lgu">Province / city / municipality</option></select></div>
-  <div><label for="type">NOTICE TYPE</label><select id="type"><option>Invitation to Bid</option><option>Request for Quotation</option><option>Bid Bulletin</option><option>Request for Proposal</option><option>Procurement Notice</option><option>Other Announcement</option></select></div>
-  <div><label for="postedAt">POSTING DATE</label><input id="postedAt" type="date"></div>
-  <div><label for="deadline">BID DEADLINE</label><input id="deadline" type="date"></div>
-  <div><label for="budget">ABC / BUDGET (PHP)</label><input id="budget" placeholder="e.g. 1500000"></div>
-  <div><label for="reference">REFERENCE NUMBER</label><input id="reference" placeholder="Optional"></div>
-  <div class="wide"><label for="url">OFFICIAL SOURCE LINK *</label><input id="url" type="url" required placeholder="https://official-government-or-school-website.gov.ph/..."></div>
-  <div class="wide"><label for="description">NOTES</label><textarea id="description" rows="2" placeholder="Optional details, location, pre-bid meeting, contact office"></textarea></div>
- </div>
- <div class="formactions"><button type="submit">Save notice</button><button type="reset" class="secondary">Clear form</button></div>
- </form>
+
+<section class="panel directory">
+ <div class="panelhead"><h2>Organization &amp; procurement website directory</h2><span class="meta">Official source links</span></div>
+ <div class="directory-intro">Select an organization category on the left to filter saved opportunities. Use these directory and procurement links to find the organizations and their published bid notices. Links open the original websites.</div>
+ <div class="dirgroup"><h3>National government — department procurement pages</h3><div class="dirlinks">
+ <a href="https://www.da.gov.ph/bids_and_awards/" target="_blank" rel="noopener">Department of Agriculture<small>Bids and awards</small></a>
+ <a href="https://www.dti.gov.ph/good-governance-program/transparency-seal/procurement/" target="_blank" rel="noopener">Department of Trade and Industry<small>Procurement</small></a>
+ <a href="https://www.dpwh.gov.ph/dpwh/business/procurement/cw/bid_bulletin" target="_blank" rel="noopener">Department of Public Works and Highways<small>Bid bulletins</small></a>
+ <a href="https://dotr.gov.ph/" target="_blank" rel="noopener">Department of Transportation<small>Official website; procurement notices</small></a>
+ <a href="https://www.dost.gov.ph/transparency/admin-and-finance/procurement/bid-opportunities.html" target="_blank" rel="noopener">Department of Science and Technology<small>Bid opportunities and awards</small></a>
+ <a href="https://www.doe.gov.ph/procurement/opportunities" target="_blank" rel="noopener">Department of Energy<small>Procurement opportunities</small></a>
+ <a href="https://doh.gov.ph/procurement" target="_blank" rel="noopener">Department of Health<small>Procurement</small></a>
+ <a href="https://dict.gov.ph/procurement/" target="_blank" rel="noopener">Department of Information and Communications Technology<small>Procurement</small></a>
+ <a href="https://dfa.gov.ph/transparency-dfa/procurements/bids-and-awards" target="_blank" rel="noopener">Department of Foreign Affairs<small>Bids and awards</small></a>
+ <a href="https://dilg.gov.ph/bids-archive/" target="_blank" rel="noopener">Department of the Interior and Local Government<small>Bids archive</small></a>
+ <a href="https://www.dbm.gov.ph/about-us/organizational-overview/173-bid-opportunities" target="_blank" rel="noopener">Department of Budget and Management<small>Bid opportunities</small></a>
+ <a href="https://www.dof.gov.ph/about/procurement/public-bidding/" target="_blank" rel="noopener">Department of Finance<small>Public bidding</small></a>
+ <a href="https://www.dar.gov.ph/bids-awards" target="_blank" rel="noopener">Department of Agrarian Reform<small>Bids and awards</small></a>
+ <a href="https://www.dnd.gov.ph/Procurements?t=DND%20Proper%20Bids%20and%20Awards%20Committee" target="_blank" rel="noopener">Department of National Defense<small>Procurements</small></a>
+ <a href="https://www.deped.gov.ph/category/procurement/bid-opportunities/" target="_blank" rel="noopener">Department of Education<small>Bid opportunities</small></a>
+ <a href="https://denr.gov.ph/index.php/bid-opportunities/denr-central-office/bid-bulletin" target="_blank" rel="noopener">Department of Environment and Natural Resources<small>Bid bulletins</small></a>
+ <a href="https://www.dswd.gov.ph/bid/" target="_blank" rel="noopener">Department of Social Welfare and Development<small>Bids</small></a>
+ <a href="https://procurement.dswd.gov.ph/" target="_blank" rel="noopener">DSWD procurement monitoring system<small>Opportunities, awards and status</small></a>
+ <a href="https://dhsud.gov.ph/procurement/" target="_blank" rel="noopener">Department of Human Settlements and Urban Development<small>Procurement</small></a>
+ <a href="https://www.doj.gov.ph/search.html?q=bid" target="_blank" rel="noopener">Department of Justice<small>Search for bid notices</small></a>
+ </div></div>
+ <div class="dirgroup"><h3>Central government and public directories</h3><div class="dirlinks">
+ <a href="https://www.dbm.gov.ph/wp-content/uploads/AboutDBM/2026-Government-Directory.pdf" target="_blank" rel="noopener">2026 Philippine Government Directory — DBM<small>National departments, offices and agencies (PDF)</small></a>
+ <a href="https://notices.philgeps.gov.ph/" target="_blank" rel="noopener">PhilGEPS public notices<small>Government procurement notices</small></a>
+ <a href="https://ps-philgeps.gov.ph/home/index.php/bid-opportunities" target="_blank" rel="noopener">Procurement Service — PhilGEPS<small>Bid opportunities</small></a>
+ <a href="https://www.foi.gov.ph/agencies/dilg/lgu-directory/" target="_blank" rel="noopener">DILG local government directory reference<small>Province, city and municipal government directory information</small></a>
+ <a href="https://lgu201.dilg.gov.ph/" target="_blank" rel="noopener">DILG LGU portal<small>Local government units</small></a>
+ </div></div>
+ <div class="dirgroup"><h3>Public schools and private basic education schools</h3><div class="dirlinks">
+ <a href="https://www.deped.gov.ph/" target="_blank" rel="noopener">Department of Education<small>Official national education portal</small></a>
+ <a href="https://www.foi.gov.ph/agencies/deped/updated-masterlist-of-all-public-and-private-basic-education-schools-in-the-philippines-with-official-school-email-addresses/" target="_blank" rel="noopener">DepEd updated public/private school masterlist reference<small>Masterlist request and published response record</small></a>
+ <a href="https://www.foi.gov.ph/agencies/deped/" target="_blank" rel="noopener">DepEd records and school directory requests<small>Browse published school-list responses</small></a>
+ <a href="https://www.deped.gov.ph/contact-us/regional-division-offices-directory/" target="_blank" rel="noopener">DepEd regional and division offices<small>Regional and schools division office directory</small></a>
+ </div></div>
+ <div class="dirgroup"><h3>Universities and colleges</h3><div class="dirlinks">
+ <a href="https://heida.ched.gov.ph/hei-directory" target="_blank" rel="noopener">CHED Higher Education Institution Directory<small>Regional directory of HEIs</small></a>
+ <a href="https://ched.e.gov.ph/" target="_blank" rel="noopener">Commission on Higher Education<small>CHED and higher education information</small></a>
+ <a href="https://www.upb.edu.ph/" target="_blank" rel="noopener">University of the Philippines Baguio<small>Example university procurement links are published by its BAC</small></a>
+ <a href="https://bac.upb.edu.ph/bid-opportunities/" target="_blank" rel="noopener">UP Baguio — Bid Opportunities<small>Invitations, bid documents and bulletins</small></a>
+ <a href="https://www.dorsu.edu.ph/bidding-opportunities-2026-present-2/" target="_blank" rel="noopener">Davao Oriental State University<small>Bidding opportunities and quotations</small></a>
+ <a href="https://www.vsu.edu.ph/philgeps-opportunities" target="_blank" rel="noopener">Visayas State University<small>PhilGEPS postings and bid documents</small></a>
+ <a href="https://tup.edu.ph/procurement" target="_blank" rel="noopener">Technological University of the Philippines<small>Procurement and bid opportunities</small></a>
+ </div></div>
+ <div class="dirgroup"><h3>International schools</h3><div class="dirlinks">
+ <a href="https://www.schoolfinderph.com/international-schools" target="_blank" rel="noopener">International schools in the Philippines — directory reference<small>Independent directory; verify each school's official website</small></a>
+ <a href="https://www.ibo.org/programmes/find-an-ib-school/" target="_blank" rel="noopener">International Baccalaureate — Find an IB World School<small>Official IB school finder</small></a>
+ <a href="https://www.cambridgeinternational.org/why-choose-us/find-a-cambridge-school/" target="_blank" rel="noopener">Cambridge International — Find a school<small>Official Cambridge school finder</small></a>
+ </div></div>
+ <div class="dirgroup"><h3>Government corporations, hospitals, utilities and other public institutions</h3><div class="dirlinks">
+ <a href="https://www.gcg.gov.ph/" target="_blank" rel="noopener">Governance Commission for GOCCs<small>Government-owned and controlled corporation information</small></a>
+ <a href="https://www.philgeps.gov.ph/" target="_blank" rel="noopener">PhilGEPS<small>Public procurement portal</small></a>
+ <a href="https://www.gov.ph/" target="_blank" rel="noopener">Official Gazette / Government portal<small>Government information and links</small></a>
+ </div></div>
 </section>
+
 <section class="panel">
  <div class="panelhead"><h2>Saved public procurement notices</h2><div class="formactions" style="padding:0"><button class="secondary" id="exportBtn">Export backup</button><button class="secondary" id="importBtn">Import backup</button><button class="secondary" id="csvBtn">Export CSV</button><input type="file" id="importFile" accept="application/json" hidden></div></div>
- <div class="tablewrap"><table><thead><tr><th>Opportunity / Notice</th><th>Organization</th><th>Type</th><th>Posted</th><th>Deadline</th><th>ABC / Budget</th><th>Source</th><th>Action</th></tr></thead><tbody id="rows"><tr><td colspan="8" class="empty">No notices saved yet. Add your first notice using the form above.</td></tr></tbody></table></div>
+ <div class="tablewrap"><table><thead><tr><th>Opportunity / Notice</th><th>Organization</th><th>Type</th><th>Posted</th><th>Deadline</th><th>ABC / Budget</th><th>Source</th><th>Action</th></tr></thead><tbody id="rows"><tr><td colspan="8" class="empty">No records loaded yet. Use Import backup to load your procurement records.</td></tr></tbody></table></div>
 </section>
 </main><footer>CREATED BY RP8</footer>
 <script>
@@ -88,18 +126,16 @@ function fmt(v){if(!v)return "—";let d=new Date(v+"T00:00:00");return isNaN(d)
 function render(){let q=$("q").value.toLowerCase().trim(),days=$("period").value,cutoff=days==="all"?null:Date.now()-Number(days)*86400000,selected=[...document.querySelectorAll(".orgfilter:checked")].map(e=>e.value);
  let items=records.filter(x=>{let txt=[x.title,x.organization,x.description,x.type,x.reference].join(" ").toLowerCase();let date=x.postedAt?new Date(x.postedAt).getTime():NaN;return (!q||q.split(/\s+/).some(w=>txt.includes(w)))&&(!cutoff||!isFinite(date)||date>=cutoff)&&selected.includes(x.orgType)});
  $("count").textContent=items.length;$("orgcount").textContent=new Set(records.map(x=>x.organization.toLowerCase())).size;
- const body=$("rows");body.innerHTML="";if(!items.length){body.innerHTML='<tr><td colspan="8" class="empty">No matching saved notices. Add a notice manually or change your filters.</td></tr>';return}
+ const body=$("rows");body.innerHTML="";if(!items.length){body.innerHTML='<tr><td colspan="8" class="empty">No matching saved notices. Change your filters or import a backup.</td></tr>';return}
  items.forEach(x=>{let tr=document.createElement("tr");tr.innerHTML=`<td><b>${esc(x.title)}</b>${x.reference?`<div class="meta">Ref: ${esc(x.reference)}</div>`:""}</td><td>${esc(x.organization)}</td><td><span class="tag">${esc(x.type)}</span></td><td>${fmt(x.postedAt)}</td><td>${fmt(x.deadline)}</td><td>${x.budget? "₱"+esc(Number(x.budget).toLocaleString("en-PH")):"—"}</td><td><a href="${esc(x.url)}" target="_blank" rel="noopener">Open source</a></td><td><button class="secondary delete" data-id="${esc(x.id)}">Delete</button></td>`;body.append(tr)});
  document.querySelectorAll(".delete").forEach(b=>b.onclick=()=>{if(confirm("Delete this saved notice?")){records=records.filter(x=>x.id!==b.dataset.id);save()}});
 }
-$("noticeForm").onsubmit=e=>{e.preventDefault();let x={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:$("title").value.trim(),organization:$("organization").value.trim(),orgType:$("orgType").value,type:$("type").value,postedAt:$("postedAt").value,deadline:$("deadline").value,budget:$("budget").value.trim(),reference:$("reference").value.trim(),url:$("url").value.trim(),description:$("description").value.trim()};if(!/^https?:\/\//i.test(x.url)){alert("Please enter a complete official source link beginning with https:// or http://");return}records.unshift(x);save();e.target.reset();});
-$("searchBtn").onclick=render;$("q").onkeydown=e=>{if(e.key==="Enter")render()};$("period").onchange=render;document.querySelectorAll(".orgfilter").forEach(x=>x.onchange=render);document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{$("q").value=b.dataset.q;render()});
-$("exportBtn").onclick=()=>{download("rp8-procurement-backup.json",JSON.stringify(records,null,2),"application/json")};
 $("csvBtn").onclick=()=>{let cols=["title","organization","orgType","type","postedAt","deadline","budget","reference","url","description"];let csv=[cols.join(","),...records.map(r=>cols.map(k=>'"'+String(r[k]??"").replace(/"/g,'""')+'"').join(","))].join("\r\n");download("rp8-procurement-notices.csv",csv,"text/csv")};
 function download(name,data,type){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([data],{type}));a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
 $("importBtn").onclick=()=>$("importFile").click();$("importFile").onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let data=JSON.parse(await f.text());if(!Array.isArray(data))throw Error();let map=new Map(records.map(x=>[x.id,x]));data.forEach(x=>{if(x&&x.title&&x.organization&&x.url)map.set(x.id||String(Date.now()+Math.random()),x)});records=[...map.values()];save();alert("Backup imported.")}catch{alert("That backup file is not valid.")}e.target.value=""};
+document.querySelectorAll(".orgfilter").forEach(e=>e.addEventListener("change",render));
+$("searchBtn").onclick=render;$("q").addEventListener("keydown",e=>{if(e.key==="Enter")render()});$("period").addEventListener("change",render);
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{$("q").value=b.dataset.q;$("period").value="all";render()});
 load();render();
 </script>
-</body></html>'''
-out.write_text(html, encoding="utf-8")
-print(f"Created manual-only single-file dashboard: {out} ({out.stat().st_size:,} bytes)")
+</body></html>
