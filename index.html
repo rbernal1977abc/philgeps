@@ -3,345 +3,211 @@ from pathlib import Path
 html = r'''<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#06110d">
-  <title>PhilGEPS | Procurement Intelligence</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #050b08;
-      --panel: rgba(8, 22, 15, .94);
-      --panel-2: rgba(10, 29, 19, .9);
-      --line: rgba(69, 255, 145, .22);
-      --green: #43ff91;
-      --green-soft: #a2ffc5;
-      --muted: #8aa995;
-      --text: #e4ffed;
-      --amber: #ffd166;
-      --red: #ff7777;
-    }
-    * { box-sizing: border-box; }
-    html { background: var(--bg); }
-    body {
-      margin: 0; min-height: 100vh; color: var(--text);
-      background:
-        radial-gradient(ellipse at 80% 0%, rgba(0, 255, 112, .10), transparent 34rem),
-        linear-gradient(rgba(39, 255, 122, .025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(39, 255, 122, .025) 1px, transparent 1px),
-        var(--bg);
-      background-size: auto, 32px 32px, 32px 32px, auto;
-      font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
-    }
-    body::before {
-      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-      opacity: .10; background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(67,255,145,.13) 4px);
-    }
-    button, input { font: inherit; }
-    button { cursor: pointer; }
-    .shell { position: relative; z-index: 1; max-width: 1500px; margin: auto; padding: 24px; }
-    .topbar { display:flex; justify-content:space-between; align-items:center; gap:18px; padding: 8px 0 22px; border-bottom:1px solid var(--line); }
-    .brand { display:flex; align-items:center; gap:13px; }
-    .mark { width:42px; height:42px; border:1px solid var(--green); color:var(--green); display:grid; place-items:center; font-weight:800; letter-spacing:-2px; box-shadow:0 0 18px rgba(67,255,145,.14), inset 0 0 14px rgba(67,255,145,.08); }
-    .eyebrow { color:var(--green); font-size:11px; letter-spacing:.2em; text-transform:uppercase; }
-    h1 { font-size:clamp(20px,3vw,27px); margin:2px 0 0; letter-spacing:.04em; }
-    .top-meta { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; text-align:right; }
-    .live-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 10px var(--green); margin-right:7px; }
-    .layout { display:grid; grid-template-columns:250px minmax(0,1fr); gap:20px; padding-top:20px; }
-    aside, .panel { background:var(--panel); border:1px solid var(--line); box-shadow:0 10px 35px rgba(0,0,0,.2); }
-    aside { padding:18px; align-self:start; }
-    .section-label { color:var(--green); font-size:11px; letter-spacing:.17em; text-transform:uppercase; margin:0 0 13px; }
-    .nav-item { display:block; padding:10px 11px; color:var(--muted); border-left:2px solid transparent; margin:3px 0; font-size:13px; }
-    .nav-item.active { color:var(--green-soft); border-color:var(--green); background:rgba(67,255,145,.07); }
-    .side-note { border-top:1px solid var(--line); margin-top:20px; padding-top:16px; color:var(--muted); font-size:12px; }
-    main { min-width:0; }
-    .notice { border:1px solid rgba(255,209,102,.35); color:#ffe5a3; background:rgba(255,209,102,.07); padding:10px 13px; font-size:12px; margin-bottom:16px; }
-    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
-    .stat { padding:15px; background:var(--panel); border:1px solid var(--line); min-width:0; }
-    .stat-label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
-    .stat-value { color:var(--green-soft); font-size:25px; font-weight:700; margin-top:4px; }
-    .stat-sub { color:var(--muted); font-size:11px; }
-    .panel { padding:18px; margin-bottom:16px; }
-    .panel-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
-    h2 { font-size:14px; letter-spacing:.13em; text-transform:uppercase; margin:0; color:var(--green-soft); }
-    .hint { color:var(--muted); font-size:11px; }
-    .keyword-row { display:flex; gap:9px; }
-    input[type="text"] { width:100%; min-width:0; background:#030906; color:var(--text); border:1px solid var(--line); padding:12px 13px; outline:none; }
-    input[type="text"]:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(67,255,145,.1); }
-    .btn { border:1px solid var(--green); color:var(--green-soft); background:rgba(67,255,145,.08); padding:10px 14px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; }
-    .btn:hover { background:rgba(67,255,145,.16); }
-    .btn.primary { color:#031109; background:var(--green); font-weight:800; }
-    .btn.subtle { border-color:var(--line); color:var(--muted); background:transparent; }
-    .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-    .tags { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; min-height:26px; }
-    .tag { display:inline-flex; align-items:center; gap:8px; padding:5px 8px; border:1px solid rgba(67,255,145,.32); background:rgba(67,255,145,.07); color:var(--green-soft); font-size:11px; }
-    .tag button { border:0; background:none; color:var(--green); padding:0; font-size:15px; line-height:1; }
-    .table-wrap { overflow-x:auto; }
-    table { width:100%; border-collapse:collapse; min-width:850px; font-size:12px; }
-    th { text-align:left; color:var(--green); font-weight:600; text-transform:uppercase; letter-spacing:.1em; font-size:10px; padding:12px 10px; border-bottom:1px solid var(--line); }
-    td { padding:13px 10px; border-bottom:1px solid rgba(69,255,145,.11); vertical-align:top; color:#d6f4df; }
-    tbody tr:hover { background:rgba(67,255,145,.045); }
-    .title-cell { min-width:220px; font-weight:600; }
-    .muted { color:var(--muted); }
-    .grade { display:inline-block; min-width:28px; text-align:center; padding:3px 7px; font-weight:800; border:1px solid; }
-    .grade-a { color:var(--green); border-color:rgba(67,255,145,.5); background:rgba(67,255,145,.08); }
-    .grade-b { color:var(--amber); border-color:rgba(255,209,102,.45); background:rgba(255,209,102,.07); }
-    .grade-c { color:#ff9292; border-color:rgba(255,119,119,.4); background:rgba(255,119,119,.06); }
-    .view-btn { border:1px solid var(--line); background:transparent; color:var(--green-soft); padding:7px 9px; font-size:11px; }
-    .empty { text-align:center; padding:28px; color:var(--muted); }
-    .footer { display:flex; justify-content:space-between; gap:12px; padding:15px 2px 5px; color:var(--muted); font-size:11px; border-top:1px solid var(--line); }
-    .footer strong { color:var(--green-soft); letter-spacing:.12em; }
-    dialog { width:min(720px,calc(100% - 28px)); max-height:85vh; overflow:auto; color:var(--text); background:#07130c; border:1px solid var(--green); padding:22px; box-shadow:0 0 40px rgba(0,0,0,.7); }
-    dialog::backdrop { background:rgba(0,0,0,.75); }
-    .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
-    .detail { padding:11px; background:var(--panel-2); border:1px solid var(--line); }
-    .detail b { display:block; color:var(--green); font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
-    .detail span { font-size:13px; overflow-wrap:anywhere; }
-    .detail-description { white-space:pre-wrap; color:#d6f4df; font-size:13px; }
-    .matrix-rain { color:rgba(67,255,145,.12); letter-spacing:.2em; font:11px/1.6 monospace; overflow:hidden; white-space:nowrap; height:19px; margin-top:16px; }
-    @media (max-width:900px) { .layout { grid-template-columns:1fr; } aside { display:none; } }
-    @media (max-width:620px) {
-      .shell { padding:14px; } .topbar { align-items:flex-start; } .top-meta { font-size:10px; }
-      .stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-      .stat { padding:12px; } .stat-value { font-size:21px; }
-      .panel { padding:14px; } .keyword-row { flex-direction:column; }
-      .keyword-row .btn { width:100%; } .panel-head { align-items:flex-start; flex-direction:column; }
-      .detail-grid { grid-template-columns:1fr; } .footer { flex-direction:column; }
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      .live-dot { animation:pulse 2s infinite; }
-      @keyframes pulse { 50% { opacity:.45; box-shadow:0 0 2px var(--green); } }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07110d">
+<title>PhilGEPS Procurement Intelligence</title>
+<style>
+:root{color-scheme:dark;--bg:#07100c;--panel:#0d1b14;--panel2:#102319;--line:#244a34;--green:#63e69a;--text:#e8f5ec;--muted:#9bb3a2;--amber:#ffd27a;--red:#ff8585}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#153b2633,transparent 38rem),var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
+a{color:var(--green)}button,input,select{font:inherit}.wrap{max-width:1500px;margin:auto;padding:22px}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:8px 0 20px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border:1px solid var(--green);display:grid;place-items:center;color:var(--green);font-weight:800;font-size:17px}
+.kicker{color:var(--green);font-size:10px;letter-spacing:.2em;text-transform:uppercase}h1{font-size:clamp(19px,3vw,27px);margin:2px 0;letter-spacing:.04em}
+.badge{border:1px solid var(--line);border-radius:20px;padding:6px 11px;color:var(--muted);font-size:11px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px;padding-top:18px}
+aside,.card,.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+aside{padding:17px;align-self:start}.label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--green);margin:0 0 10px}
+nav a{display:block;padding:9px 10px;text-decoration:none;color:var(--muted);border-left:2px solid transparent}nav a:hover{color:var(--text);background:#63e69a0c;border-color:var(--green)}
+.side-info{border-top:1px solid var(--line);margin-top:18px;padding-top:14px;color:var(--muted);font-size:12px}
+main{min-width:0}.card{padding:17px;margin-bottom:15px}.cardhead{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:13px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--green);margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}.btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--green);background:#63e69a12;color:var(--text);padding:9px 13px;text-decoration:none;border-radius:5px;font-size:12px;cursor:pointer}.btn:hover{background:#63e69a24}.btn.primary{background:var(--green);color:#07110c;font-weight:700}.btn.secondary{border-color:var(--line);color:var(--muted)}
+.notice{border:1px solid #80632d;background:#ffd27a0c;color:#f5dca7;padding:11px 13px;border-radius:5px;font-size:12px;margin-bottom:15px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:15px}.stat{padding:13px}.stat small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em}.stat strong{display:block;font-size:24px;color:var(--green);margin-top:4px}.stat span{font-size:10px;color:var(--muted)}
+input[type=text],input[type=date],select{width:100%;min-width:0;background:#07120c;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:10px}
+.row{display:grid;grid-template-columns:1fr auto;gap:8px}.row3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:9px}
+.help{font-size:11px;color:var(--muted);margin-top:8px}.filters{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.chip{border:1px solid var(--line);border-radius:20px;padding:4px 9px;color:var(--muted);font-size:10px;cursor:pointer}.chip.active{border-color:var(--green);color:var(--green)}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:850px;font-size:12px}th{text-align:left;color:var(--green);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:11px 9px;border-bottom:1px solid var(--line)}td{padding:11px 9px;border-bottom:1px solid #244a3466;vertical-align:top}tbody tr:hover{background:#63e69a09}.title{font-weight:600;min-width:230px}.muted{color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:32px 14px}.status{font-size:11px;color:var(--muted);margin-top:10px;overflow-wrap:anywhere}
+footer{border-top:1px solid var(--line);padding:14px 0;color:var(--muted);font-size:10px;display:flex;justify-content:space-between;gap:10px;margin-top:8px}
+dialog{background:#0d1b14;color:var(--text);border:1px solid var(--green);border-radius:8px;width:min(700px,calc(100% - 24px));max-height:85vh;overflow:auto;padding:20px}dialog::backdrop{background:#000b}.detailgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.detail{background:var(--panel2);padding:10px;border:1px solid var(--line);overflow-wrap:anywhere}.detail b{display:block;color:var(--green);font-size:10px;text-transform:uppercase}.detail p{margin:4px 0 0}
+@media(max-width:900px){.grid{grid-template-columns:1fr}aside{display:none}}@media(max-width:650px){.wrap{padding:12px}header{align-items:flex-start}.badge{font-size:9px}.stats{grid-template-columns:1fr 1fr}.row,.row3{grid-template-columns:1fr}.card{padding:13px}footer{flex-direction:column}.detailgrid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-  <div class="shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="mark">RP</div>
-        <div><div class="eyebrow">Procurement Intelligence System</div><h1>PhilGEPS // OPPORTUNITY MONITOR</h1></div>
-      </div>
-      <div class="top-meta"><span><i class="live-dot"></i>LOCAL DEMO MODE</span><span id="today"></span></div>
-    </header>
-
-    <div class="layout">
-      <aside aria-label="Main navigation">
-        <p class="section-label">Navigation</p>
-        <div class="nav-item active">◈ Opportunity Monitor</div>
-        <div class="nav-item">⌕ Keyword Intelligence</div>
-        <div class="nav-item">▤ Procurement Archive</div>
-        <div class="nav-item">◉ AI Match Analysis</div>
-        <div class="side-note">
-          <p class="section-label">System status</p>
-          <div><i class="live-dot"></i>Interface operational</div>
-          <p>PhilGEPS live connection: <span style="color:var(--amber)">Not connected</span></p>
-          <p>AI analysis: <span style="color:var(--amber)">Demo only</span></p>
-        </div>
-      </aside>
-
-      <main>
-        <div class="notice"><strong>DEMO DATA ONLY:</strong> These sample opportunities are illustrative. This page is not connected to PhilGEPS and does not retrieve live tenders or perform real AI classification yet.</div>
-
-        <section class="stats" aria-label="Opportunity summary">
-          <div class="stat"><div class="stat-label">Sample opportunities</div><div class="stat-value" id="countAll">4</div><div class="stat-sub">Displayed in this demo</div></div>
-          <div class="stat"><div class="stat-label">Strong matches</div><div class="stat-value" id="countA">2</div><div class="stat-sub">Classification A</div></div>
-          <div class="stat"><div class="stat-label">For review</div><div class="stat-value" id="countB">1</div><div class="stat-sub">Classification B</div></div>
-          <div class="stat"><div class="stat-label">Command center</div><div class="stat-value" id="countCC">1</div><div class="stat-sub">Priority category</div></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Keyword search console</h2><span class="hint">Separate terms with commas, then add them as filters.</span></div>
-          <div class="keyword-row">
-            <input id="keywordInput" type="text" aria-label="Comma-separated keywords" placeholder="e.g. Command Center, CCTV, AI, Smart City">
-            <button class="btn primary" id="addKeywords" type="button">+ Add keywords</button>
-          </div>
-          <div class="tags" id="keywordTags" aria-live="polite"></div>
-          <div class="actions">
-            <button class="btn primary" id="applyFilters" type="button">Apply search</button>
-            <button class="btn" id="savePreset" type="button">Save filter</button>
-            <button class="btn subtle" id="clearFilters" type="button">Clear all</button>
-            <button class="btn subtle" id="resetDefaults" type="button">Reset default</button>
-          </div>
-          <div class="hint" id="filterStatus" style="margin-top:10px">Default keyword set loaded. Search filters sample rows only.</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Opportunity feed</h2><span class="hint">Newest sample records first · Select a record for details</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>#</th><th>Project / description</th><th>Date posted</th><th>Reference no.</th><th>AI match</th><th>Bid opening</th><th>Pre-bid</th><th>Closing</th><th>Details</th></tr></thead>
-              <tbody id="opportunityRows"></tbody>
-            </table>
-          </div>
-          <div id="emptyState" class="empty" hidden>No sample records match these keywords. Try another term or reset the defaults.</div>
-        </section>
-        <div class="matrix-rain" aria-hidden="true">01010000 01001000 01001001 01001100 01000111 01000101 01010000 01010011 // DATA STREAM // 01001001 01001110 01010100 01000101 01001100</div>
-      </main>
-    </div>
-    <footer class="footer"><span>PHILGEPS PROCUREMENT INTELLIGENCE // FRONT-END PROTOTYPE</span><strong>Created by RP 8</strong></footer>
+<div class="wrap">
+<header>
+ <div class="brand"><div class="logo">PG</div><div><div class="kicker">Procurement Intelligence Workspace</div><h1>PhilGEPS Opportunity Monitor</h1></div></div>
+ <div class="badge" id="workspaceState">LOCAL WORKSPACE · NOT CONNECTED</div>
+</header>
+<div class="grid">
+<aside>
+ <p class="label">Navigation</p>
+ <nav>
+  <a href="#connection">PhilGEPS access</a>
+  <a href="#search">Opportunity search</a>
+  <a href="#results">Loaded records</a>
+ </nav>
+ <div class="side-info">
+  <p class="label">Data status</p>
+  <div id="dataState">No procurement dataset loaded</div>
+  <p id="lastLoaded">No import or retrieval in this session.</p>
+  <p>Analysis: local keyword relevance scoring. No external AI service is connected.</p>
+ </div>
+</aside>
+<main>
+ <div class="notice"><b>Data integrity:</b> This workspace contains no fabricated opportunities. Results appear only after you load an official PhilGEPS export or another verified dataset. Opening PhilGEPS does not automatically share its login session with this page.</div>
+ <section class="card" id="connection">
+  <div class="cardhead"><h2>PhilGEPS supplier access</h2><span class="muted">Official pages</span></div>
+  <div class="actions">
+   <a class="btn primary" href="https://notices.philgeps.gov.ph/GEPS/log-in.aspx" target="_blank" rel="noopener noreferrer">Open supplier login ↗</a>
+   <a class="btn" href="https://notices.philgeps.gov.ph/GEPS/Tender/OpportunitiesCatAgencySearchUI.aspx?ClickFrom=OpenOpp&amp;EPSSubMenuID=10" target="_blank" rel="noopener noreferrer">Open opportunities ↗</a>
+   <a class="btn" href="https://notices.philgeps.gov.ph/GEPS/Tender/OpportunitiesSearchUI.aspx?ClickFrom=OpenOpp&amp;Result=3" target="_blank" rel="noopener noreferrer">Open search results ↗</a>
+   <a class="btn secondary" href="https://philgeps.ebizolution.net/open-data" target="_blank" rel="noopener noreferrer">Official PhilGEPS open data ↗</a>
   </div>
-
-  <dialog id="detailDialog">
-    <div class="panel-head"><h2 id="detailTitle">Opportunity details</h2><button class="btn subtle" id="closeDialog" type="button">Close ×</button></div>
-    <div class="detail-grid" id="detailGrid"></div>
-    <div class="detail"><b>Full description / scope</b><div class="detail-description" id="detailDescription"></div></div>
-    <p class="hint" style="margin-top:14px">All unspecified information is marked “Not stated”. This is illustrative sample content, not an official PhilGEPS notice.</p>
-  </dialog>
-
-  <script>
-    (() => {
-      const defaults = [
-        "Command Center", "Drones", "UAV", "School Systems", "HRIS", "Payroll",
-        "Library Systems", "Student Information", "LMS", "Websites", "Portals",
-        "Information Systems", "Automation", "AI", "CCTV", "Surveillance",
-        "Alarm Systems", "Smart City", "Data Center", "Starlink",
-        "Digitalization", "Digitalisation", "Digitization", "Digitisation",
-        "Digital Transformation", "Digital"
-      ];
-      const records = [
-        {
-          title:"Supply, Delivery and Installation of an Integrated Emergency Command Center",
-          date:"2026-11-20", ref:"DEMO-2026-001", grade:"A",
-          opening:"Not stated", prebid:"2026-11-26", closing:"2026-12-04",
-          entity:"Sample Local Government Unit", abc:"₱18,500,000.00", mode:"Public Bidding",
-          scope:"Illustrative scope: command center workstations, video wall, operator consoles, CCTV integration, communications equipment, software configuration, testing and training.",
-          eligibility:"Not stated", documents:"Not stated", venue:"Not stated", security:"Not stated",
-          delivery:"Not stated", contact:"Not stated", source:"Not stated"
-        },
-        {
-          title:"Supply and Installation of IP CCTV Surveillance System",
-          date:"2026-11-19", ref:"DEMO-2026-002", grade:"A",
-          opening:"2026-12-10", prebid:"2026-11-27", closing:"2026-12-09",
-          entity:"Sample Provincial Office", abc:"₱7,250,000.00", mode:"Public Bidding",
-          scope:"Illustrative scope: IP cameras, network video recorder, video management software, storage, accessories, installation, configuration and commissioning.",
-          eligibility:"Not stated", documents:"Not stated", venue:"Not stated", security:"Not stated",
-          delivery:"Not stated", contact:"Not stated", source:"Not stated"
-        },
-        {
-          title:"Development of an Online Student Information and Enrollment Portal",
-          date:"2026-11-18", ref:"DEMO-2026-003", grade:"B",
-          opening:"Not stated", prebid:"Not stated", closing:"2026-12-02",
-          entity:"Sample State College", abc:"₱3,800,000.00", mode:"Negotiated Procurement",
-          scope:"Illustrative scope: student records, online enrollment, user accounts, reporting, data migration, training and support.",
-          eligibility:"Not stated", documents:"Not stated", venue:"Not stated", security:"Not stated",
-          delivery:"Not stated", contact:"Not stated", source:"Not stated"
-        },
-        {
-          title:"Procurement of Agricultural Drone Equipment",
-          date:"2026-11-17", ref:"DEMO-2026-004", grade:"C",
-          opening:"2026-12-08", prebid:"Not stated", closing:"2026-12-07",
-          entity:"Sample Municipal Office", abc:"₱1,200,000.00", mode:"Public Bidding",
-          scope:"Illustrative scope: unmanned aerial vehicle equipment and related accessories.",
-          eligibility:"Not stated", documents:"Not stated", venue:"Not stated", security:"Not stated",
-          delivery:"Not stated", contact:"Not stated", source:"Not stated"
-        }
-      ];
-      let keywords = [...defaults];
-      let filtered = records.slice();
-      const $ = id => document.getElementById(id);
-      const normalize = value => value.toLocaleLowerCase();
-      $("today").textContent = new Intl.DateTimeFormat("en-PH", {dateStyle:"medium"}).format(new Date());
-
-      function renderTags() {
-        $("keywordTags").replaceChildren();
-        keywords.forEach((word, index) => {
-          const tag = document.createElement("span");
-          tag.className = "tag";
-          const label = document.createElement("span");
-          label.textContent = word;
-          const remove = document.createElement("button");
-          remove.type = "button"; remove.textContent = "×";
-          remove.setAttribute("aria-label", "Remove " + word);
-          remove.addEventListener("click", () => { keywords.splice(index, 1); renderTags(); });
-          tag.append(label, remove); $("keywordTags").append(tag);
-        });
-      }
-      function addKeywords() {
-        const additions = $("keywordInput").value.split(",").map(x => x.trim()).filter(Boolean);
-        const seen = new Set(keywords.map(normalize));
-        additions.forEach(word => { if (!seen.has(normalize(word))) { keywords.push(word); seen.add(normalize(word)); } });
-        $("keywordInput").value = ""; renderTags();
-      }
-      function renderRows() {
-        const body = $("opportunityRows"); body.replaceChildren();
-        filtered.forEach((record, index) => {
-          const row = document.createElement("tr");
-          const values = [
-            String(index + 1), record.title, record.date, record.ref, record.grade,
-            record.opening, record.prebid, record.closing
-          ];
-          values.forEach((value, i) => {
-            const cell = document.createElement("td");
-            if (i === 1) { cell.className = "title-cell"; cell.textContent = value; }
-            else if (i === 4) { const badge = document.createElement("span"); badge.className = "grade grade-" + value.toLowerCase(); badge.textContent = value; cell.append(badge); }
-            else { cell.textContent = value; if (value === "Not stated") cell.className = "muted"; }
-            row.append(cell);
-          });
-          const action = document.createElement("td");
-          const button = document.createElement("button"); button.type = "button"; button.className = "view-btn"; button.textContent = "View";
-          button.addEventListener("click", () => showDetails(record));
-          action.append(button); row.append(action); body.append(row);
-        });
-        $("emptyState").hidden = filtered.length > 0;
-        $("countAll").textContent = filtered.length;
-        $("countA").textContent = filtered.filter(r => r.grade === "A").length;
-        $("countB").textContent = filtered.filter(r => r.grade === "B").length;
-        $("countCC").textContent = filtered.filter(r => /command center/i.test(r.title)).length;
-      }
-      function applyFilters() {
-        const terms = keywords.map(normalize);
-        filtered = terms.length ? records.filter(record => {
-          const searchable = normalize([record.title, record.ref, record.entity, record.scope].join(" "));
-          return terms.some(term => searchable.includes(term));
-        }) : records.slice();
-        renderRows();
-        $("filterStatus").textContent = keywords.length
-          ? "Showing sample records matching at least one active keyword. This is not a live PhilGEPS search."
-          : "No active keywords: all sample records are shown.";
-      }
-      function showDetails(record) {
-        $("detailTitle").textContent = record.title;
-        const fields = [
-          ["Procuring entity",record.entity],["ABC",record.abc],["Reference number",record.ref],
-          ["Procurement mode",record.mode],["Date posted",record.date],["Bid opening",record.opening],
-          ["Pre-bid conference",record.prebid],["Submission / closing",record.closing],
-          ["Eligibility requirements",record.eligibility],["Bid documents",record.documents],
-          ["Pre-bid venue / online details",record.venue],["Bid security",record.security],
-          ["Delivery / implementation",record.delivery],["Contact details",record.contact],
-          ["Source link",record.source]
-        ];
-        $("detailGrid").replaceChildren();
-        fields.forEach(([label,value]) => {
-          const item = document.createElement("div"); item.className = "detail";
-          const heading = document.createElement("b"); heading.textContent = label;
-          const content = document.createElement("span"); content.textContent = value || "Not stated";
-          item.append(heading,content); $("detailGrid").append(item);
-        });
-        $("detailDescription").textContent = record.scope || "Not stated";
-        $("detailDialog").showModal();
-      }
-      $("addKeywords").addEventListener("click", addKeywords);
-      $("keywordInput").addEventListener("keydown", event => { if (event.key === "Enter") addKeywords(); });
-      $("applyFilters").addEventListener("click", applyFilters);
-      $("clearFilters").addEventListener("click", () => { keywords = []; renderTags(); applyFilters(); });
-      $("resetDefaults").addEventListener("click", () => { keywords = [...defaults]; renderTags(); applyFilters(); });
-      $("savePreset").addEventListener("click", () => {
-        const preset = keywords.join(", ");
-        if (!preset) { $("filterStatus").textContent = "Add at least one keyword before saving a filter."; return; }
-        const blob = new Blob([preset], {type:"text/plain"});
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a"); link.href = url; link.download = "philgeps-keyword-filter.txt";
-        document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-        $("filterStatus").textContent = "Filter downloaded as a text file. Keep it to reuse your keyword set.";
-      });
-      $("closeDialog").addEventListener("click", () => $("detailDialog").close());
-      $("detailDialog").addEventListener("click", event => { if (event.target === $("detailDialog")) $("detailDialog").close(); });
-      renderTags(); applyFilters();
-    })();
-  </script>
-</body>
-</html>
-'''
-path = Path("/mnt/data/philgeps_matrix_dashboard.html")
+  <p class="help">Sign in on the official PhilGEPS page. To make authenticated retrieval automatic, this application still needs a locally running browser/backend integration. This HTML page does not capture credentials, read another tab's cookies, or claim to be logged in.</p>
+ </section>
+ <section class="stats">
+  <div class="stat"><small>Loaded opportunities</small><strong id="total">0</strong><span>Verified imported records</span></div>
+  <div class="stat"><small>High relevance</small><strong id="high">0</strong><span>3 or more keyword matches</span></div>
+  <div class="stat"><small>Review</small><strong id="review">0</strong><span>1–2 keyword matches</span></div>
+  <div class="stat"><small>No keyword match</small><strong id="none">0</strong><span>0 matches</span></div>
+ </section>
+ <section class="card" id="search">
+  <div class="cardhead"><h2>Procurement keyword search</h2><span class="muted">Search loaded records</span></div>
+  <div class="row"><input id="query" type="text" placeholder="Search title, agency, reference, category, description…"><button class="btn primary" id="searchBtn">Search</button></div>
+  <div class="filters" id="quickFilters">
+   <button class="chip" data-term="Command Center">Command Center</button><button class="chip" data-term="CCTV">CCTV</button><button class="chip" data-term="Drones">Drones / UAV</button><button class="chip" data-term="Data Center">Data Center</button><button class="chip" data-term="AI">AI</button><button class="chip" data-term="Digital Transformation">Digital Transformation</button><button class="chip" data-term="School Systems">School Systems</button><button class="chip" data-term="Alarm Systems">Alarm Systems</button>
+  </div>
+  <div class="row3" style="margin-top:12px">
+   <input id="agency" type="text" placeholder="Filter by procuring entity">
+   <input id="fromDate" type="date" aria-label="Published from">
+   <input id="toDate" type="date" aria-label="Published to">
+  </div>
+  <div class="actions" style="margin-top:11px">
+   <label class="btn" for="fileInput">Load PhilGEPS CSV / JSON</label><input id="fileInput" type="file" accept=".csv,.json,text/csv,application/json" hidden>
+   <button class="btn" id="exportBtn">Export current results</button>
+   <button class="btn secondary" id="clearBtn">Clear search</button>
+   <button class="btn secondary" id="clearDataBtn">Clear local dataset</button>
+  </div>
+  <div class="status" id="status" role="status">No records loaded. Download a dataset from the official PhilGEPS open-data page or export results from PhilGEPS, then load the file here.</div>
+ </section>
+ <section class="card" id="results">
+  <div class="cardhead"><h2>Procurement records</h2><span class="muted" id="resultCount">0 records</span></div>
+  <div class="tablewrap"><table><thead><tr><th>Project / notice title</th><th>Procuring entity</th><th>Reference</th><th>ABC</th><th>Published</th><th>Closing</th><th>Match</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="empty" id="empty">No procurement records are loaded. No sample or placeholder opportunities are displayed.</div>
+ </section>
+</main>
+</div>
+<footer><span>PHILGEPS PROCUREMENT INTELLIGENCE · LOCAL DATA WORKSPACE</span><span>Supplier credentials are entered only on the official PhilGEPS website.</span></footer>
+</div>
+<dialog id="detail"><div class="cardhead"><h2 id="detailTitle">Notice details</h2><button class="btn secondary" id="closeDetail">Close</button></div><div class="detailgrid" id="detailBody"></div></dialog>
+<script>
+(()=>{
+ const $=id=>document.getElementById(id);
+ let records=[],shown=[];
+ const terms=["Command Center","Drones","UAV","School Systems","HRIS","Payroll","Library Systems","Student Information","LMS","Websites","Portals","Information Systems","Automation","AI","CCTV","Surveillance","Alarm Systems","Smart City","Data Center","Starlink","Digitalization","Digitalisation","Digitization","Digitisation","Digital Transformation"];
+ const norm=v=>String(v??"").toLocaleLowerCase();
+ const first=(...v)=>v.find(x=>x!==undefined&&x!==null&&String(x).trim()!=="")??"";
+ function mapRecord(r){
+  const t=r.tender||r;
+  const buyer=r.buyer||r.procuringEntity||r.procuring_entity||{};
+  const val=t.value||{};
+  return {
+   title:first(t.title,r.title,r.project,r.description,"Untitled notice"),
+   entity:first(buyer.name,r.entity,r.procuringEntityName,r.procuring_entity_name),
+   ref:first(t.id,r.referenceNo,r.reference_no,r.ref,r.reference,r.id),
+   abc:first(r.abc,r.approvedBudget,r.approved_budget,r.budget,val.amount!==undefined?`${val.currency||"PHP"} ${Number(val.amount).toLocaleString("en-PH")}`:""),
+   published:first(r.date,r.publishDate,r.publish_date,r.datePosted,r.date_posted),
+   closing:first(t.tenderPeriod?.endDate,r.closing,r.closingDate,r.closing_date,r.deadline),
+   category:first(r.category,r.procurementCategory,t.mainProcurementCategory),
+   mode:first(r.mode,r.procurementMode,r.procurement_mode,t.procurementMethodDetails),
+   description:first(t.description,r.scope,r.description,r.title),
+   status:first(t.status,r.status),
+   url:first(r.url,r.link,r.source),
+   raw:r
+  };
+ }
+ function relevance(r){
+  const text=norm([r.title,r.entity,r.category,r.description,r.mode].join(" "));
+  const hits=terms.filter(k=>text.includes(norm(k)));
+  return {score:hits.length,grade:hits.length>=3?"HIGH":hits.length>=1?"REVIEW":"—",hits};
+ }
+ function render(){
+  const q=norm($("query").value.trim()),a=norm($("agency").value.trim()),from=$("fromDate").value,to=$("toDate").value;
+  shown=records.filter(r=>{
+   const text=norm([r.title,r.entity,r.ref,r.abc,r.category,r.description,r.mode].join(" "));
+   if(q&&!text.includes(q))return false;
+   if(a&&!norm(r.entity).includes(a))return false;
+   const d=Date.parse(r.published);
+   if(from&&(!Number.isFinite(d)||d<Date.parse(from)))return false;
+   if(to&&(!Number.isFinite(d)||d>Date.parse(to+"T23:59:59")))return false;
+   return true;
+  }).sort((x,y)=>String(y.published).localeCompare(String(x.published)));
+  const scored=records.map(r=>relevance(r));
+  $("total").textContent=records.length;
+  $("high").textContent=scored.filter(x=>x.grade==="HIGH").length;
+  $("review").textContent=scored.filter(x=>x.grade==="REVIEW").length;
+  $("none").textContent=scored.filter(x=>x.grade==="—").length;
+  $("resultCount").textContent=`${shown.length} of ${records.length} records`;
+  $("rows").innerHTML="";
+  $("empty").hidden=shown.length>0;
+  shown.forEach(r=>{
+   const m=relevance(r),tr=document.createElement("tr");
+   [r.title,r.entity||"Not supplied",r.ref||"Not supplied",r.abc||"Not supplied",r.published||"Not supplied",r.closing||"Not supplied",m.grade].forEach((v,i)=>{
+    const td=document.createElement("td");td.textContent=v;if(i===0)td.className="title";if(i===6)td.style.color=m.grade==="HIGH"?"var(--green)":m.grade==="REVIEW"?"var(--amber)":"var(--muted)";tr.appendChild(td);
+   });
+   const td=document.createElement("td"),b=document.createElement("button");b.className="btn";b.textContent="Details";b.addEventListener("click",()=>details(r));td.appendChild(b);tr.appendChild(td);$("rows").appendChild(tr);
+  });
+  $("dataState").textContent=records.length?`${records.length} records loaded locally`:"No procurement dataset loaded";
+  $("workspaceState").textContent=records.length?"LOCAL DATA LOADED · PHILGEPS LOGIN SEPARATE":"LOCAL WORKSPACE · NOT CONNECTED";
+ }
+ function details(r){
+  $("detailTitle").textContent=r.title;
+  const fields=[["Procuring entity",r.entity],["Reference number",r.ref],["ABC",r.abc],["Published",r.published],["Closing",r.closing],["Category",r.category],["Procurement mode",r.mode],["Notice status",r.status],["Matched terms",relevance(r).hits.join(", ")||"None"],["Source page",r.url],["Description",r.description]];
+  $("detailBody").innerHTML="";
+  fields.forEach(([k,v])=>{const d=document.createElement("div");d.className="detail";const b=document.createElement("b");b.textContent=k;const p=document.createElement("p");p.textContent=v||"Not supplied in source";d.append(b,p);$("detailBody").appendChild(d)});
+  $("detail").showModal();
+ }
+ function parseCSV(text){
+  const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(x=>x.trim());
+  if(!lines.length)return [];
+  function split(line){let out=[],v="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'&&line[i+1]==='"'&&q){v+='"';i++}else if(c==='"')q=!q;else if(c===","&&!q){out.push(v);v=""}else v+=c}out.push(v);return out}
+  const headers=split(lines.shift()).map(x=>x.trim());
+  return lines.map(line=>{const vals=split(line);return Object.fromEntries(headers.map((h,i)=>[h,vals[i]??""]))});
+ }
+ $("fileInput").addEventListener("change",async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+   const text=await f.text();let parsed=f.name.toLowerCase().endsWith(".csv")?parseCSV(text):JSON.parse(text);
+   if(parsed&&Array.isArray(parsed.releases))parsed=parsed.releases;
+   if(parsed&&Array.isArray(parsed.data))parsed=parsed.data;
+   if(!Array.isArray(parsed))throw new Error("The file must contain a JSON array, OCDS releases array, or CSV table.");
+   records=parsed.map(mapRecord).filter(r=>r.title!=="Untitled notice"||r.ref||r.entity);
+   $("lastLoaded").textContent=`Loaded ${f.name} · ${new Date().toLocaleString()}`;
+   $("status").textContent=`Loaded ${records.length} records from ${f.name}. Search and relevance scoring run locally in this browser.`;
+   render();
+  }catch(err){$("status").textContent="Could not load file: "+err.message}
+  e.target.value="";
+ });
+ $("searchBtn").addEventListener("click",render);
+ $("query").addEventListener("keydown",e=>{if(e.key==="Enter")render()});
+ ["agency","fromDate","toDate"].forEach(id=>$(id).addEventListener("change",render));
+ $("quickFilters").addEventListener("click",e=>{const b=e.target.closest("[data-term]");if(!b)return;$("query").value=b.dataset.term;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("active",x===b));render()});
+ $("clearBtn").addEventListener("click",()=>{$("query").value=$("agency").value=$("fromDate").value=$("toDate").value="";document.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));render()});
+ $("clearDataBtn").addEventListener("click",()=>{records=[];$("lastLoaded").textContent="No import or retrieval in this session.";$("status").textContent="Local dataset cleared.";render()});
+ $("exportBtn").addEventListener("click",()=>{
+  if(!shown.length){$("status").textContent="There are no filtered records to export.";return}
+  const cols=["title","entity","ref","abc","published","closing","category","mode","status","url"];
+  const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const csv=[cols.join(","),...shown.map(r=>cols.map(k=>esc(r[k])).join(","))].join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="philgeps-filtered-opportunities.csv";a.click();URL.revokeObjectURL(a.href);
+ });
+ $("closeDetail").addEventListener("click",()=>$("detail").close());
+ render();
+})();
+</script>
+</body></html>'''
+path = Path("/mnt/data/philgeps_procurement_intelligence.html")
 path.write_text(html, encoding="utf-8")
-print(f"Created {path} ({path.stat().st_size:,} bytes)")
+print(f"Created {path} ({path.stat().st_size:,} bytes).")
