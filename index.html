@@ -1,35 +1,351 @@
-html = r'''<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PhilGEPS Procurement Intelligence</title>
-<style>
-:root{color-scheme:dark;--bg:#07100c;--panel:#0d1b14;--line:#244a34;--green:#63e69a;--text:#e8f5ec;--muted:#9bb3a2}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% 0%,#153b2633,transparent 38rem),var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,sans-serif}.wrap{max-width:1480px;margin:auto;padding:24px}
-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 20px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px;border:1px solid var(--green);display:grid;place-items:center;color:var(--green);font-weight:800}.kicker{color:var(--green);font-size:10px;letter-spacing:.2em;text-transform:uppercase}h1{font-size:clamp(20px,3vw,28px);margin:2px 0}.badge{border:1px solid var(--line);border-radius:20px;padding:6px 11px;color:var(--muted);font-size:11px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;margin:18px 0}.head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--green);margin:0}.btn{display:inline-block;text-decoration:none;border:1px solid var(--green);background:#63e69a12;color:var(--text);padding:10px 14px;border-radius:5px;font-size:12px;cursor:pointer}.primary{background:var(--green);color:#07110c;font-weight:700}.row{display:flex;gap:9px;flex-wrap:wrap}input{width:100%;min-width:0;background:#07120c;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:12px;font:inherit}label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.filters{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}.status{font-size:12px;color:var(--muted);margin-top:12px;white-space:pre-wrap}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:1100px;font-size:12px}th{text-align:left;color:var(--green);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:12px 9px;border-bottom:1px solid var(--line)}td{padding:12px 9px;border-bottom:1px solid #244a3466;vertical-align:top}.empty{text-align:center;color:var(--muted);padding:38px 14px}.small{font-size:11px;color:var(--muted)}a{color:var(--green)}.chips{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}.chip{border:1px solid var(--line);color:var(--muted);background:#07120c;padding:6px 10px;border-radius:18px;cursor:pointer;font-size:11px}.chip:hover{border-color:var(--green);color:var(--green)}.footer{text-align:center;color:var(--muted);font-size:11px;letter-spacing:.12em;padding:24px 0 12px;margin-top:24px;border-top:1px solid var(--line)}
-@media(max-width:700px){.wrap{padding:13px}header{align-items:flex-start;flex-direction:column}.filters{grid-template-columns:1fr}.card{padding:14px}}
-</style>
-</head>
-<body><div class="wrap">
-<header><div class="brand"><div class="logo">PG</div><div><div class="kicker">Procurement Intelligence</div><h1>PhilGEPS Opportunity Monitor</h1></div></div><div class="badge" id="state">LOGIN NOT VERIFIED</div></header>
-<section class="card"><div class="head"><h2>PhilGEPS connection</h2><span class="small">Official supplier login</span></div>
-<a class="btn primary" id="connect" href="https://notices.philgeps.gov.ph/GEPS/log-in.aspx" target="_blank" rel="noopener noreferrer">Connect to PhilGEPS ↗</a>
-<div class="status" id="connectionMsg" role="status">Opens the official PhilGEPS login in a new tab. After signing in, return here. This page cannot independently read PhilGEPS' private login session, so it will not claim you are connected unless a verified integration confirms it.</div></section>
-<section class="card"><div class="head"><h2>Procurement keyword search</h2><span class="small">Past 3 calendar days by default</span></div>
-<div class="filters"><div><label for="keyword">Procurement keyword</label><input id="keyword" placeholder="Enter a keyword, e.g. CCTV"></div><div><label for="from">Posting date from</label><input type="date" id="from"></div><div><label for="to">Posting date to</label><input type="date" id="to"></div></div>
-<div class="chips"><button class="chip" data-key="CCTV" type="button">CCTV</button><button class="chip" data-key="computers" type="button">Computers</button><button class="chip" data-key="networking equipment" type="button">Networking equipment</button><button class="chip" data-key="servers" type="button">Servers</button></div>
-<div class="row"><button class="btn primary" id="search" type="button">Search procurement opportunities</button></div><div class="status" id="searchMsg">Authenticated search service is not yet connected to this Vercel deployment.</div></section>
-<section class="card"><div class="head"><h2>Procurement records</h2><span class="small" id="count">0 records</span></div><div class="tablewrap"><table><thead><tr><th>Project / procurement title</th><th>Procuring entity</th><th>Reference number</th><th>ABC</th><th>Bid creation / posting date</th><th>Pre-bid date</th><th>Bid closing date</th><th>Source notice</th></tr></thead><tbody id="rows"></tbody></table></div><div class="empty" id="empty">No procurement records retrieved yet.</div></section>
-<footer class="footer">CREATED BY RP8</footer>
-</div>
-<script>
-const $=id=>document.getElementById(id);
-const today=new Date();today.setHours(0,0,0,0);const first=new Date(today);first.setDate(first.getDate()-2);
-const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-$('from').value=iso(first);$('to').value=iso(today);
-document.querySelectorAll('[data-key]').forEach(b=>b.addEventListener('click',()=>{$('keyword').value=b.dataset.key;$('keyword').focus()}));
-$('search').addEventListener('click',()=>{$('searchMsg').textContent='Search is not active yet: the Vercel deployment needs a secure authenticated PhilGEPS retrieval service. No fake results will be shown.';});
-$('keyword').addEventListener('keydown',e=>{if(e.key==='Enter')$('search').click()});
-$('connect').addEventListener('click',()=>{$('state').textContent='PHILGEPS LOGIN OPENED';$('connectionMsg').textContent='The official PhilGEPS login is opening in a new tab. Sign in there, then return here. Login status cannot be confirmed by this page alone.';});
-</script></body></html>'''
+from pathlib import Path
+import zipfile, textwrap, os
+
+root = Path("/mnt/data/PhilGEPS_Complete_Project")
+(root / "static").mkdir(parents=True, exist_ok=True)
+
+# Reuse the corrected UI, configured to talk to the local persistent browser service.
+frontend = Path("/mnt/data/PhilGEPS_Final_Frontend/index.html").read_text(encoding="utf-8")
+(root / "static" / "index.html").write_text(frontend, encoding="utf-8")
+
+server = r'''from __future__ import annotations
+import os, re, threading, time
+from datetime import date, timedelta
+from urllib.parse import urljoin, urlparse
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
+
+LOGIN_URL = "https://notices.philgeps.gov.ph/GEPS/log-in.aspx"
+SEARCH_URL = "https://notices.philgeps.gov.ph/GEPS/Tender/OpportunitiesSearchUI.aspx?ClickFrom=OpenOpp&Result=3"
+ALLOWED_HOST = "notices.philgeps.gov.ph"
+PROFILE_DIR = os.path.join(os.path.dirname(__file__), "philgeps_browser_profile")
+FRONTEND_ORIGIN = "https://philgeps.vercel.app"
+
+app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": [FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"]}},
+     allow_headers=["Content-Type"], methods=["GET", "POST", "OPTIONS"])
+lock = threading.RLock()
+pw = browser = context = page = None
+connected = False
+last_error = ""
+last_session_probe = 0.0
+
+def official_url(url: str) -> bool:
+    return urlparse(url or "").hostname == ALLOWED_HOST
+
+def probe_session() -> bool:
+    """Confirm access to the protected opportunities route in the persistent context."""
+    global connected, last_error, last_session_probe
+    if not context:
+        connected = False
+        return False
+    now = time.monotonic()
+    if now - last_session_probe < 2.0:
+        return connected
+    last_session_probe = now
+    probe = None
+    try:
+        probe = context.new_page()
+        response = probe.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=30000)
+        probe.wait_for_timeout(700)
+        final_url = probe.url or ""
+        if not official_url(final_url):
+            connected = False
+            last_error = "PhilGEPS redirected outside its official domain."
+            return False
+        final_lower = final_url.lower()
+        if "log-in.aspx" in final_lower or "login" in final_lower:
+            connected = False
+            last_error = ""
+            return False
+        # Confirm we landed on the requested opportunities page, not merely any
+        # PhilGEPS page. A successful HTTP response alone is not sufficient.
+        body = (probe.locator("body").inner_text(timeout=5000) or "").lower()
+        has_search_ui = any(word in body for word in ("search", "opportunities", "procurement"))
+        has_login_form = probe.locator('input[type="password"]').count() > 0
+        connected = bool(response and response.ok and has_search_ui and not has_login_form
+                         and "opportunitiessearchui.aspx" in final_lower)
+        last_error = "" if connected else "PhilGEPS has not confirmed access to the protected opportunities search page."
+        return connected
+    except Exception as exc:
+        connected = False
+        last_error = f"Session check failed: {exc}"
+        return False
+    finally:
+        if probe:
+            try: probe.close()
+            except Exception: pass
+
+def start_browser():
+    global pw, browser, context, page, connected, last_error
+    with lock:
+        if context and page and not page.is_closed():
+            try: page.bring_to_front()
+            except Exception: pass
+            return
+        pw = sync_playwright().start()
+        context = pw.chromium.launch_persistent_context(
+            PROFILE_DIR, headless=False, accept_downloads=True,
+            args=["--start-maximized"], viewport=None
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+        connected = False
+        last_error = ""
+
+def find_keyword_field(p):
+    selectors = [
+        'input[placeholder*="keyword" i]', 'input[aria-label*="keyword" i]',
+        'input[name*="keyword" i]', 'input[id*="keyword" i]',
+        'input[placeholder*="title" i]', 'input[name*="title" i]',
+        'input[type="text"]'
+    ]
+    for selector in selectors:
+        loc = p.locator(selector)
+        for i in range(min(loc.count(), 10)):
+            el = loc.nth(i)
+            try:
+                if el.is_visible() and el.is_enabled(): return el
+            except Exception: pass
+    return None
+
+def fill_date_fields(p, start, end):
+    changed = []
+    for el in p.locator("input").all():
+        try:
+            if not el.is_visible() or not el.is_enabled(): continue
+            meta = " ".join(str(el.get_attribute(x) or "") for x in
+                            ["name", "id", "placeholder", "aria-label", "title"]).lower()
+            if not any(k in meta for k in ["date", "publish", "posted", "created", "from", "to"]): continue
+            val = start if any(k in meta for k in ["from", "start"]) else end
+            if (el.get_attribute("type") or "").lower() == "date": el.fill(val)
+            else: el.fill(date.fromisoformat(val).strftime("%m/%d/%Y"))
+            changed.append(meta)
+        except Exception: pass
+    return changed
+
+def click_search(p):
+    for selector in ['input[type="submit"]', 'input[type="button"]', 'button']:
+        loc = p.locator(selector)
+        for i in range(min(loc.count(), 15)):
+            try:
+                el = loc.nth(i)
+                label = (el.get_attribute("value") or el.inner_text() or el.get_attribute("title") or "").strip()
+                if el.is_visible() and "search" in label.lower():
+                    el.click(timeout=5000)
+                    try: p.wait_for_load_state("domcontentloaded", timeout=15000)
+                    except Exception: pass
+                    p.wait_for_timeout(1000)
+                    return True
+            except Exception: pass
+    return False
+
+def collect_result_links(p):
+    soup = BeautifulSoup(p.content(), "html.parser")
+    links = []
+    for a in soup.find_all("a", href=True):
+        href = urljoin(p.url, a["href"])
+        low = href.lower()
+        if official_url(href) and ("bidnoticeabstract" in low or "refid=" in low):
+            if href not in links: links.append(href)
+    return links
+
+def extract_detail(url):
+    global page
+    original = page.url
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(350)
+        soup = BeautifulSoup(page.content(), "html.parser")
+        txt = re.sub(r"[ \t]+", " ", soup.get_text("\n", strip=True))
+        def after(label):
+            m = re.search(r"(?im)^\s*" + re.escape(label) + r"\s*:?\s*(.+?)\s*$", txt)
+            return m.group(1).strip() if m else ""
+        title = after("Title") or after("Project Title")
+        agency = after("Procuring Entity")
+        ref = after("Reference Number")
+        abc = after("Approved Budget for the Contract")
+        published = after("Date Published")
+        closing = after("Closing Date / Time")
+        prebid = ""
+        m = re.search(r"(?is)Pre-?Bid Conference\s*(?:Date\s*Time\s*Venue)?\s*(.{0,500}?)(?:Other Information|Remarks|Created by|$)", txt)
+        if m: prebid = re.sub(r"\s+", " ", m.group(1)).strip(" :\n")
+        return {"project": title, "agency": agency, "reference": ref, "abc": abc,
+                "published": published, "prebid": prebid, "closing": closing, "url": url}
+    finally:
+        try: page.goto(original, wait_until="domcontentloaded", timeout=20000)
+        except Exception: pass
+
+@app.get("/api/status")
+def status():
+    with lock:
+        if context and page and not page.is_closed():
+            verified = probe_session()
+        else:
+            verified = False
+        return jsonify({"ok": True, "browser_open": bool(page and not page.is_closed()),
+                        "verified": verified, "current_url": page.url if page and not page.is_closed() else "",
+                        "error": last_error})
+
+@app.post("/api/connect")
+def connect():
+    try:
+        start_browser()
+        return jsonify({"ok": True, "message": "Official PhilGEPS login opened in the RP8 browser. Sign in there; this dashboard will detect access automatically."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+@app.post("/api/search")
+def search():
+    global connected, last_error
+    body = request.get_json(silent=True) or {}
+    keyword = (body.get("keyword") or "").strip()
+    if not keyword: return jsonify({"ok": False, "error": "Enter a procurement keyword."}), 400
+    try:
+        start = date.fromisoformat(body.get("from") or (date.today()-timedelta(days=2)).isoformat())
+        end = date.fromisoformat(body.get("to") or date.today().isoformat())
+        if end < start: return jsonify({"ok": False, "error": "The end date must be on or after the start date."}), 400
+    except ValueError:
+        return jsonify({"ok": False, "error": "Use valid dates in YYYY-MM-DD format."}), 400
+    with lock:
+        if not context or not page or page.is_closed() or not probe_session():
+            return jsonify({"ok": False, "error": "PhilGEPS login is not verified. Sign in through the RP8 browser first."}), 401
+        try:
+            page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(700)
+            field = find_keyword_field(page)
+            if not field:
+                return jsonify({"ok": False, "error": "PhilGEPS session is active, but the keyword field selector needs adjustment for the current search page."}), 502
+            field.fill(keyword)
+            fill_date_fields(page, start.isoformat(), end.isoformat())
+            if not click_search(page):
+                return jsonify({"ok": False, "error": "Could not identify PhilGEPS Search control. No results were claimed."}), 502
+            records, seen, pages = [], set(), 0
+            while pages < 30:
+                pages += 1
+                for link in collect_result_links(page):
+                    if link in seen: continue
+                    seen.add(link)
+                    try:
+                        record = extract_detail(link)
+                        if record["project"] or record["reference"]: records.append(record)
+                    except Exception: continue
+                next_button = None
+                for selector in ["a", "button", 'input[type="submit"]']:
+                    loc = page.locator(selector)
+                    for i in range(min(loc.count(), 80)):
+                        el = loc.nth(i)
+                        try:
+                            label = (el.inner_text() or el.get_attribute("value") or el.get_attribute("title") or "").strip().lower()
+                            if el.is_visible() and (label in ["next", ">", "›"] or "next page" in label):
+                                next_button = el; break
+                        except Exception: pass
+                    if next_button: break
+                if not next_button: break
+                try:
+                    next_button.click(timeout=3000)
+                    try: page.wait_for_load_state("domcontentloaded", timeout=12000)
+                    except Exception: pass
+                    page.wait_for_timeout(500)
+                except Exception: break
+            return jsonify({"ok": True, "count": len(records), "records": records,
+                            "pages_scanned": pages, "keyword": keyword,
+                            "period": {"from": start.isoformat(), "to": end.isoformat()},
+                            "note": "Extracted fields should be checked against each official notice."})
+        except Exception as exc:
+            last_error = str(exc)
+            connected = False
+            return jsonify({"ok": False, "error": str(exc)}), 500
+
+@app.get("/health")
+def health():
+    return jsonify({"ok": True, "service": "RP8 PhilGEPS local browser service"})
+
+if __name__ == "__main__":
+    print("RP8 PhilGEPS service listening on http://127.0.0.1:8765")
+    print("Keep this window open while using the Vercel dashboard.")
+    app.run(host="127.0.0.1", port=8765, debug=False, threaded=True)
+'''
+(root / "server.py").write_text(server, encoding="utf-8")
+(root / "requirements.txt").write_text("Flask==3.1.1\nflask-cors==5.0.1\nplaywright==1.52.0\nbeautifulsoup4==4.13.4\n", encoding="utf-8")
+(root / "start_rp8_philgeps.bat").write_text(r'''@echo off
+cd /d "%~dp0"
+py -3 -m venv .venv
+call .venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
+python server.py
+pause
+''', encoding="utf-8")
+(root / "README.txt").write_text(textwrap.dedent("""\
+    RP8 PHILGEPS OPPORTUNITY MONITOR — COMPLETE FRONTEND + LOCAL AUTHENTICATED BROWSER SERVICE
+
+    WHAT THIS PACKAGE DOES
+    - Keeps the dashboard frontend compatible with the existing Vercel site.
+    - Runs a persistent Playwright Chromium profile on the Windows computer.
+    - The Connect button opens the official PhilGEPS login in that managed browser.
+    - The dashboard polls the service and verifies access by requesting the protected
+      PhilGEPS opportunities page in the same persistent browser context.
+    - Search requests are sent to that browser service; credentials are never entered
+      into this dashboard or stored in source code.
+
+    IMPORTANT ARCHITECTURE
+    The browser service must run on the same computer that displays the Vercel dashboard.
+    The browser profile is stored in ./philgeps_browser_profile and persists between runs.
+    Keep the command window open while using the dashboard. Each colleague who uses the
+    dashboard needs their own local service/browser profile and must sign in themselves.
+    This is intentional: the PhilGEPS session is not shared by copying cookies or passwords.
+
+    INSTALL / RUN ON WINDOWS
+    1. Extract this ZIP to a permanent folder, e.g. C:\\RP8\\PhilGEPS.
+    2. Double-click start_rp8_philgeps.bat.
+    3. Allow the first-time Python package and Chromium installation to finish.
+    4. Leave the black command window open.
+    5. Open https://philgeps.vercel.app in Chrome or Edge.
+    6. Click Connect to PhilGEPS. A separate managed Chromium window opens.
+    7. Sign in on the official PhilGEPS page in that Chromium window.
+    8. Return to the dashboard. It checks every two seconds and should display
+       PHILGEPS CONNECTED after the protected opportunities page is accessible.
+    9. Search using CCTV, computers, networking equipment, servers, or another keyword.
+
+    VERCEL FRONTEND
+    The included static/index.html is the corrected frontend. Replace the repository's
+    index.html with this file's contents (move static/index.html to repository root)
+    and redeploy on Vercel. It calls http://127.0.0.1:8765, which is the service on the
+    user's own computer.
+
+    SECURITY
+    - Never paste supplier credentials into ChatGPT, source code, or dashboard fields.
+    - Sign in only on notices.philgeps.gov.ph in the managed browser.
+    - Do not expose port 8765 to the public internet or configure router port forwarding.
+    - The service binds to 127.0.0.1 only.
+    - Browser profile contains the authenticated session; protect the Windows account
+      and do not share the profile folder.
+
+    TEST STATUS / LIMITATIONS
+    The source repository currently has only index.html; it has no hosted backend.
+    This package supplies the missing local backend and UI wiring. The PhilGEPS login
+    and current search page have not been live-tested with your supplier account.
+    PhilGEPS is a legacy ASP.NET site and may change its form selectors or markup.
+    If login detection stays pending or a search selector error appears, send the
+    exact on-screen error and the service command-window output (hide any personal
+    information). Do not send passwords, cookies, or session files.
+    A successful session check does not guarantee that every notice field is parsed
+    perfectly; verify each record using its official notice link.
+
+    DATE DEFAULT
+    The dashboard defaults to today and the preceding two calendar days, inclusive.
+"""), encoding="utf-8")
+
+# Add a copy of frontend at project root for simple Vercel replacement.
+(root / "index.html").write_text(frontend, encoding="utf-8")
+
+zip_path = Path("/mnt/data/PhilGEPS_Complete_Authenticated_Project.zip")
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    for p in root.rglob("*"):
+        if p.is_file():
+            z.write(p, p.relative_to(root.parent))
+print("Created", zip_path, "size", zip_path.stat().st_size)
